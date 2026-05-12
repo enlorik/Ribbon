@@ -53,7 +53,7 @@ describe("smoke: runCheck --demo", () => {
     expect(sources).toContain("npm-audit");
   });
 
-  it("returns exit code 0 when demo has no diagnostics (impossible path sanity check)", async () => {
+  it("demo always has diagnostics, never returns exit code 0", async () => {
     // demo always returns diagnostics, so code should be 1
     const code = await runCheck({ demo: true });
     expect(code).not.toBe(0);
