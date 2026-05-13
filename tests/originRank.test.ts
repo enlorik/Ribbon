@@ -268,7 +268,7 @@ describe("rankOriginCandidates", () => {
     const distCandidate = candidates.find((item) => item.file === "dist/types/user.js");
     expect(srcCandidate).toBeDefined();
     expect(distCandidate).toBeDefined();
-    expect((srcCandidate?.score ?? 0)).toBeGreaterThan(distCandidate?.score ?? 0);
+    expect(srcCandidate?.score ?? 0).toBeGreaterThan(distCandidate?.score ?? 0);
     expect(distCandidate?.reasons).toContain("generated file penalty");
   });
 });
