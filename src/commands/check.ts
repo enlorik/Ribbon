@@ -154,7 +154,7 @@ export function resolveEnabledTools(
     ts = false;
     eslint = true;
   } else {
-    // default or both flags explicit: respect explicit values, otherwise follow project detection
+    // default: respect explicit flag values when set, otherwise follow project detection
     ts = tsFlag === false ? false : tsFlag === true ? true : hasTsconfig;
     eslint = eslintFlag === false ? false : eslintFlag === true ? true : hasEslintConfig;
   }

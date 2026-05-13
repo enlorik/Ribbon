@@ -134,7 +134,7 @@ describe("smoke: runDoctor", () => {
 });
 
 describe("smoke: CLI via tsx", () => {
-  it("check --demo --no-color exits 1 and contains 'cause ribbons'", () => {
+  it("check --demo --no-color exits with code 1 and contains 'cause ribbons'", () => {
     const repoRoot = path.resolve(import.meta.dirname, "..");
     let stdout = "";
     let exitCode = 0;
