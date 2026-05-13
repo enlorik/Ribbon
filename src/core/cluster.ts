@@ -153,7 +153,7 @@ function titleFor(anchor: NormalizedDiagnostic | undefined, key: string): string
     return `Vulnerable dependency: ${anchor.packageName ?? "unknown"}`;
   }
   if (key.startsWith("ts:syntax")) {
-    return "Syntax issue group";
+    return `Syntax issue near ${(anchor.file ?? "unknown file")}:${anchor.line ?? 0}`;
   }
   return `Cause ribbon: ${anchor.category}`;
 }

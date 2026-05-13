@@ -11,6 +11,7 @@ export function classifyTscCode(code: string | undefined, message: string): Diag
   if (
     code === "TS2304" ||
     code === "TS2339" ||
+    code === "TS2551" ||
     code === "TS2552" ||
     normalized.includes("does not exist on type")
   ) {
@@ -25,14 +26,14 @@ export function classifyTscCode(code: string | undefined, message: string): Diag
   ) {
     return "syntax";
   }
-  if (code === "TS2322" || code === "TS2345" || code === "TS2769") {
+  if (code === "TS2322" || code === "TS2345" || code === "TS7006" || code === "TS2769") {
     return "type";
   }
   return "type";
 }
 
 export function extractTscSymbol(
-  _code: string | undefined,
+  code: string | undefined,
   message: string,
 ): { symbol?: string; typeName?: string } {
   const cannotFindModule = message.match(/Cannot find module ['"]([^'"]+)['"]/i);
@@ -45,11 +46,18 @@ export function extractTscSymbol(
     return { symbol: cannotFindName[1] };
   }
 
-  const missingProperty = message.match(
-    /Property ['"]([^'"]+)['"] does not exist on type ['"]([^'"]+)['"]/i,
-  );
+  const missingProperty = message.match(/Property ['"]([^'"]+)['"] does not exist on type ['"]([^'"]+)['"]/i);
   if (missingProperty?.[1] && missingProperty?.[2]) {
     return { symbol: missingProperty[1], typeName: missingProperty[2] };
+  }
+
+  if (code === "TS2551") {
+    const missingWithSuggestion = message.match(
+      /Property ['"]([^'"]+)['"] does not exist on type ['"]([^'"]+)['"]\.\s*Did you mean ['"]([^'"]+)['"]\?/i,
+    );
+    if (missingWithSuggestion?.[1] && missingWithSuggestion?.[2]) {
+      return { symbol: missingWithSuggestion[1], typeName: missingWithSuggestion[2] };
+    }
   }
 
   const missingExportMember = message.match(

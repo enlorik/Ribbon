@@ -28,11 +28,32 @@ describe("clusterCauseRibbons", () => {
 
   it("clusters TS2307 same module", () => {
     const data = [
-      diagnostic({ code: "TS2307", category: "missing-module", symbol: "@/lib/auth" }),
-      diagnostic({ code: "TS2307", category: "missing-module", symbol: "@/lib/auth" }),
+      diagnostic({ code: "TS2307", category: "missing-module", symbol: "@/lib/auth", file: "a.ts" }),
+      diagnostic({ code: "TS2307", category: "missing-module", symbol: "@/lib/auth", file: "b.ts" }),
     ];
     const clusters = clusterCauseRibbons(data);
     expect(clusters).toHaveLength(1);
+    expect(clusters[0]?.title).toBe("Missing module: @/lib/auth");
+  });
+
+  it("groups syntax errors in same file and nearby lines", () => {
+    const data = [
+      diagnostic({ code: "TS1005", category: "syntax", file: "src/a.ts", line: 13 }),
+      diagnostic({ code: "TS1128", category: "syntax", file: "src/a.ts", line: 19 }),
+      diagnostic({ code: "TS1005", category: "syntax", file: "src/a.ts", line: 44 }),
+    ];
+    const clusters = clusterCauseRibbons(data);
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0]?.title).toContain("Syntax issue near src/a.ts");
+  });
+
+  it("does not collapse TS2322 across different files", () => {
+    const data = [
+      diagnostic({ code: "TS2322", category: "type", file: "src/a.ts" }),
+      diagnostic({ code: "TS2322", category: "type", file: "src/b.ts" }),
+    ];
+    const clusters = clusterCauseRibbons(data);
+    expect(clusters).toHaveLength(2);
   });
 
   it("clusters eslint by rule", () => {
