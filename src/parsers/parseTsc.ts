@@ -2,7 +2,7 @@ import { classifyTscCode, extractTscSymbol } from "../core/classify.js";
 import { makeDiagnosticId } from "../core/ids.js";
 import type { NormalizedDiagnostic } from "../core/types.js";
 
-const TSC_LINE = /^(.*)\((\d+),(\d+)\):\s*(error|warning|info)?\s*(TS\d+)?\s*:?\s*(.*)$/i;
+const TSC_LINE = /^(.+)\((\d+),(\d+)\):\s*(?:(error|warning|info)\s+)?(?:(TS\d+)\s*:\s*)?(.+)$/i;
 
 export function parseTsc(output: string): NormalizedDiagnostic[] {
   if (!output.trim()) {
@@ -21,7 +21,7 @@ export function parseTsc(output: string): NormalizedDiagnostic[] {
       const last = diagnostics[diagnostics.length - 1];
       if (last) {
         last.raw = `${last.raw}\n${line}`;
-        last.message = `${last.message} ${line.trim()}`.trim();
+        last.message = `${last.message}\n${line.trim()}`;
       }
       continue;
     }
