@@ -17,13 +17,14 @@ export function rankOriginCandidates(
   const scores = new Map<string, { score: number; reasons: Set<string> }>();
   const changed = new Set(projectInfo?.git?.changedFiles ?? []);
   const files = discoverProjectFiles(projectRoot, options.maxFiles);
+  const normalizedFileSet = new Set(files.map((file) => toCandidatePath(projectRoot, file)));
 
   const add = (file: string, points: number, reason: string): void => {
-    const normalized = normalizeSlashes(path.relative(projectRoot, file) || file);
+    const normalized = toCandidatePath(projectRoot, file);
     const entry = scores.get(normalized) ?? { score: 0, reasons: new Set<string>() };
     entry.score += points;
     entry.reasons.add(reason);
-    if (/\/(dist|build)\//.test(normalized) || normalized.endsWith(".min.js")) {
+    if (/(^|\/)(dist|build)\//.test(normalized) || normalized.endsWith(".min.js")) {
       entry.score -= 3;
       entry.reasons.add("generated file penalty");
     }
@@ -63,6 +64,14 @@ export function rankOriginCandidates(
   const symbol = cluster.anchor?.symbol;
   const typeName = cluster.anchor?.typeName;
 
+  if (cluster.category === "missing-module" && symbol?.startsWith("@/")) {
+    for (const candidate of modulePathCandidates(symbol)) {
+      if (normalizedFileSet.has(candidate)) {
+        add(path.join(projectRoot, candidate), 36, "exact missing module path candidate");
+      }
+    }
+  }
+
   for (const file of files) {
     const text = readTextFile(file);
     if (!text) {
@@ -72,10 +81,10 @@ export function rankOriginCandidates(
     if (typeName) {
       const typePattern = new RegExp(`\\b(interface|type|class)\\s+${escapeRegExp(typeName)}\\b`);
       if (typePattern.test(text)) {
-        add(file, 15, `contains type ${typeName}`);
+        add(file, 40, `contains type ${typeName}`);
       }
       if (symbol && text.includes(symbol)) {
-        add(file, 5, `mentions symbol ${symbol}`);
+        add(file, 3, `mentions symbol ${symbol}`);
       }
     }
 
@@ -84,7 +93,7 @@ export function rankOriginCandidates(
         `\\b(export\\s+)?(function|const|let|var|class|interface|type)\\s+${escapeRegExp(symbol)}\\b`,
       );
       if (symbolPattern.test(text)) {
-        add(file, 15, `defines symbol ${symbol}`);
+        add(file, 40, `defines symbol ${symbol}`);
       }
       if (text.includes(symbol)) {
         add(file, 5, `mentions symbol ${symbol}`);
@@ -94,7 +103,7 @@ export function rankOriginCandidates(
     if (cluster.category === "missing-module" && symbol?.startsWith("@/")) {
       const target = symbol.replace(/^@\//, "");
       if (normalizeSlashes(file).includes(target)) {
-        add(file, 8, "path resembles missing module import");
+        add(file, 10, "path resembles missing module import");
       }
     }
   }
@@ -111,4 +120,22 @@ export function rankOriginCandidates(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function toCandidatePath(projectRoot: string, file: string): string {
+  const relative = path.relative(projectRoot, file);
+  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
+    return normalizeSlashes(relative);
+  }
+  return normalizeSlashes(file);
+}
+
+function modulePathCandidates(symbol: string): string[] {
+  const target = symbol.replace(/^@\//, "");
+  return [
+    `src/${target}.ts`,
+    `src/${target}.tsx`,
+    `src/${target}/index.ts`,
+    `src/${target}/index.tsx`,
+  ].map((item) => normalizeSlashes(item));
 }
