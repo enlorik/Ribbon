@@ -4,6 +4,7 @@ import { runDoctor } from "../src/commands/doctor.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { execFileSync } from "node:child_process";
 
 function makeTmpProject(): string {
   const root = path.join(os.tmpdir(), `ribbon-smoke-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -129,5 +130,26 @@ describe("smoke: runDoctor", () => {
     writeFileSync(path.join(root, "package-lock.json"), "{}");
     await runDoctor(root);
     expect(written).toContain("npm");
+  });
+});
+
+describe("smoke: CLI via tsx", () => {
+  it("check --demo --no-color exits 1 and contains 'cause ribbons'", () => {
+    const repoRoot = path.resolve(import.meta.dirname, "..");
+    let stdout = "";
+    let exitCode = 0;
+    try {
+      stdout = execFileSync(
+        "node",
+        ["--import", "tsx/esm", "src/cli.ts", "check", "--demo", "--no-color"],
+        { cwd: repoRoot, encoding: "utf8" },
+      );
+    } catch (err: unknown) {
+      const execErr = err as { stdout?: string; status?: number };
+      stdout = execErr.stdout ?? "";
+      exitCode = execErr.status ?? 1;
+    }
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain("cause ribbons");
   });
 });
