@@ -29,37 +29,141 @@ function setupProject(): { root: string; project: ProjectInfo } {
   return { root, project };
 }
 
+function writeProjectFile(root: string, relativePath: string, content: string): void {
+  const absolutePath = path.join(root, relativePath);
+  mkdirSync(path.dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, content);
+}
+
 describe("rankOriginCandidates", () => {
-  it("boosts file containing type name", () => {
+  it("prefers type definition file for TS2339 missing property", () => {
     const { root, project } = setupProject();
+    writeProjectFile(root, "src/components/Profile.tsx", "const x = user.name;\n");
     const candidates = rankOriginCandidates(
       {
         category: "missing-symbol",
-        diagnostics: [{ id: "1", source: "typescript", severity: "error", category: "missing-symbol", message: "x", raw: "x", symbol: "name", typeName: "User" }],
-        anchor: { id: "1", source: "typescript", severity: "error", category: "missing-symbol", message: "x", raw: "x", symbol: "name", typeName: "User" },
+        diagnostics: [
+          {
+            id: "1",
+            source: "typescript",
+            severity: "error",
+            category: "missing-symbol",
+            message: "Property 'name' does not exist on type 'User'.",
+            raw: "src/components/Profile.tsx(12,8): error TS2339: Property 'name' does not exist on type 'User'.",
+            code: "TS2339",
+            file: "src/components/Profile.tsx",
+            symbol: "name",
+            typeName: "User",
+          },
+        ],
+        anchor: {
+          id: "1",
+          source: "typescript",
+          severity: "error",
+          category: "missing-symbol",
+          message: "Property 'name' does not exist on type 'User'.",
+          raw: "src/components/Profile.tsx(12,8): error TS2339: Property 'name' does not exist on type 'User'.",
+          code: "TS2339",
+          file: "src/components/Profile.tsx",
+          symbol: "name",
+          typeName: "User",
+        },
       },
       root,
       project,
       { maxFiles: 2000 },
     );
 
-    expect(candidates.some((item) => item.file.endsWith("src/types/user.ts"))).toBe(true);
+    expect(candidates[0]?.file).toBe("src/types/user.ts");
+    expect(candidates[0]?.reasons).toContain("contains type User");
   });
 
-  it("suggests tsconfig for missing module alias", () => {
+  it("ranks defining file above diagnostic file for missing symbol", () => {
     const { root, project } = setupProject();
+    writeProjectFile(root, "src/lib/client.ts", "export function createClient() {}\n");
+    writeProjectFile(root, "src/app.ts", "createClient();\n");
+    const candidates = rankOriginCandidates(
+      {
+        category: "missing-symbol",
+        diagnostics: [
+          {
+            id: "1",
+            source: "typescript",
+            severity: "error",
+            category: "missing-symbol",
+            message: "Cannot find name 'createClient'.",
+            raw: "src/app.ts(8,5): error TS2304: Cannot find name 'createClient'.",
+            code: "TS2304",
+            file: "src/app.ts",
+            symbol: "createClient",
+          },
+        ],
+        anchor: {
+          id: "1",
+          source: "typescript",
+          severity: "error",
+          category: "missing-symbol",
+          message: "Cannot find name 'createClient'.",
+          raw: "src/app.ts(8,5): error TS2304: Cannot find name 'createClient'.",
+          code: "TS2304",
+          file: "src/app.ts",
+          symbol: "createClient",
+        },
+      },
+      root,
+      project,
+      { maxFiles: 2000 },
+    );
+
+    const symbolDefIndex = candidates.findIndex((item) => item.file === "src/lib/client.ts");
+    const appIndex = candidates.findIndex((item) => item.file === "src/app.ts");
+    expect(symbolDefIndex).toBeGreaterThanOrEqual(0);
+    expect(appIndex).toBeGreaterThanOrEqual(0);
+    expect(symbolDefIndex).toBeLessThan(appIndex);
+    expect(candidates[symbolDefIndex]?.reasons).toContain("defines symbol createClient");
+  });
+
+  it("ranks exact module path candidate for missing module alias", () => {
+    const { root, project } = setupProject();
+    writeProjectFile(root, "src/lib/auth.ts", "export const auth = true;\n");
+    writeProjectFile(root, "src/app.ts", "import { auth } from '@/lib/auth';\n");
     const candidates = rankOriginCandidates(
       {
         category: "missing-module",
-        diagnostics: [{ id: "1", source: "typescript", severity: "error", category: "missing-module", message: "x", raw: "x", symbol: "@/lib/auth" }],
-        anchor: { id: "1", source: "typescript", severity: "error", category: "missing-module", message: "x", raw: "x", symbol: "@/lib/auth" },
+        diagnostics: [
+          {
+            id: "1",
+            source: "typescript",
+            severity: "error",
+            category: "missing-module",
+            message: "Cannot find module '@/lib/auth'.",
+            raw: "src/app.ts(1,22): error TS2307: Cannot find module '@/lib/auth'.",
+            file: "src/app.ts",
+            symbol: "@/lib/auth",
+          },
+        ],
+        anchor: {
+          id: "1",
+          source: "typescript",
+          severity: "error",
+          category: "missing-module",
+          message: "Cannot find module '@/lib/auth'.",
+          raw: "src/app.ts(1,22): error TS2307: Cannot find module '@/lib/auth'.",
+          file: "src/app.ts",
+          symbol: "@/lib/auth",
+        },
       },
       root,
       project,
       { maxFiles: 2000 },
     );
 
+    const moduleIndex = candidates.findIndex((item) => item.file === "src/lib/auth.ts");
+    expect(moduleIndex).toBeGreaterThanOrEqual(0);
+    expect(moduleIndex).toBeLessThanOrEqual(1);
+    expect(candidates[moduleIndex]?.reasons).toContain("exact missing module path candidate");
     expect(candidates.some((item) => item.file.endsWith("tsconfig.json"))).toBe(true);
+    expect(candidates.some((item) => item.file.endsWith("package.json"))).toBe(true);
   });
 
   it("suggests package files for audit", () => {
@@ -94,5 +198,77 @@ describe("rankOriginCandidates", () => {
 
     const changed = candidates.find((item) => item.file.endsWith("src/types/user.ts"));
     expect(changed?.score).toBeGreaterThanOrEqual(10);
+  });
+
+  it("uses normalized forward-slash paths for candidates", () => {
+    const { root, project } = setupProject();
+    const projectWithWindowsPath: ProjectInfo = {
+      ...project,
+      git: {
+        isRepo: true,
+        changedFiles: ["src\\types\\user.ts"],
+      },
+    };
+    const candidates = rankOriginCandidates(
+      {
+        category: "type",
+        diagnostics: [{ id: "1", source: "typescript", severity: "error", category: "type", message: "x", raw: "x" }],
+      },
+      root,
+      projectWithWindowsPath,
+      { maxFiles: 2000 },
+    );
+
+    expect(candidates.some((item) => item.file === "src/types/user.ts")).toBe(true);
+    expect(candidates.every((item) => !item.file.includes("\\"))).toBe(true);
+  });
+
+  it("applies generated-file penalty to lower ranking", () => {
+    const { root, project } = setupProject();
+    writeProjectFile(root, "dist/types/user.js", "class User {}\n");
+    const projectWithGeneratedChange: ProjectInfo = {
+      ...project,
+      git: {
+        isRepo: true,
+        changedFiles: ["src/types/user.ts", "dist/types/user.js"],
+      },
+    };
+    const candidates = rankOriginCandidates(
+      {
+        category: "missing-symbol",
+        diagnostics: [
+          {
+            id: "1",
+            source: "typescript",
+            severity: "error",
+            category: "missing-symbol",
+            message: "Property 'name' does not exist on type 'User'.",
+            raw: "x",
+            symbol: "name",
+            typeName: "User",
+          },
+        ],
+        anchor: {
+          id: "1",
+          source: "typescript",
+          severity: "error",
+          category: "missing-symbol",
+          message: "Property 'name' does not exist on type 'User'.",
+          raw: "x",
+          symbol: "name",
+          typeName: "User",
+        },
+      },
+      root,
+      projectWithGeneratedChange,
+      { maxFiles: 2000 },
+    );
+
+    const srcCandidate = candidates.find((item) => item.file === "src/types/user.ts");
+    const distCandidate = candidates.find((item) => item.file === "dist/types/user.js");
+    expect(srcCandidate).toBeDefined();
+    expect(distCandidate).toBeDefined();
+    expect(srcCandidate?.score ?? 0).toBeGreaterThan(distCandidate?.score ?? 0);
+    expect(distCandidate?.reasons).toContain("generated file penalty");
   });
 });
