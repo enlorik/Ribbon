@@ -2,6 +2,7 @@ import path from "node:path";
 import { readTextFile } from "../utils/fs.js";
 import { normalizeSlashes } from "../utils/paths.js";
 import { discoverProjectFiles } from "../project/discoverFiles.js";
+import { readTsconfigPaths, resolveTsconfigAlias } from "../project/tsconfigPaths.js";
 import type { CauseCluster, OriginCandidate, ProjectInfo } from "./types.js";
 
 export interface RankOptions {
@@ -64,10 +65,37 @@ export function rankOriginCandidates(
   const symbol = cluster.anchor?.symbol;
   const typeName = cluster.anchor?.typeName;
 
-  if (cluster.category === "missing-module" && symbol?.startsWith("@/")) {
-    for (const candidate of modulePathCandidates(symbol)) {
-      if (normalizedFileSet.has(candidate)) {
-        add(path.join(projectRoot, candidate), 36, "exact missing module path candidate");
+  // Compute alias base paths for missing-module (used both below and inside the file loop)
+  const missingModuleAliasBases: string[] = [];
+  let usedTsconfigPaths = false;
+
+  if (cluster.category === "missing-module" && symbol) {
+    const tsconfigPathsData = projectInfo?.tsconfigPath
+      ? readTsconfigPaths(projectInfo.tsconfigPath)
+      : undefined;
+
+    if (tsconfigPathsData) {
+      const aliased = resolveTsconfigAlias(symbol, tsconfigPathsData);
+      if (aliased.length > 0) {
+        missingModuleAliasBases.push(...aliased);
+        usedTsconfigPaths = true;
+      }
+    }
+
+    // Fallback: keep existing "@/..." -> "src/..." mapping
+    if (!usedTsconfigPaths && symbol.startsWith("@/")) {
+      missingModuleAliasBases.push(`src/${symbol.slice(2)}`);
+    }
+
+    for (const base of missingModuleAliasBases) {
+      for (const candidate of expandWithExtensions(base)) {
+        if (normalizedFileSet.has(candidate)) {
+          add(
+            path.join(projectRoot, candidate),
+            36,
+            usedTsconfigPaths ? "tsconfig path alias candidate" : "exact missing module path candidate",
+          );
+        }
       }
     }
   }
@@ -100,10 +128,12 @@ export function rankOriginCandidates(
       }
     }
 
-    if (cluster.category === "missing-module" && symbol?.startsWith("@/")) {
-      const target = symbol.replace(/^@\//, "");
-      if (normalizeSlashes(file).includes(target)) {
-        add(file, 10, "path resembles missing module import");
+    if (cluster.category === "missing-module" && missingModuleAliasBases.length > 0) {
+      for (const base of missingModuleAliasBases) {
+        if (normalizeSlashes(file).includes(base)) {
+          add(file, 10, "path resembles missing module import");
+          break;
+        }
       }
     }
   }
@@ -130,12 +160,16 @@ function toCandidatePath(projectRoot: string, file: string): string {
   return normalizeSlashes(file);
 }
 
-function modulePathCandidates(symbol: string): string[] {
-  const target = symbol.replace(/^@\//, "");
+function expandWithExtensions(base: string): string[] {
+  const b = normalizeSlashes(base);
   return [
-    `src/${target}.ts`,
-    `src/${target}.tsx`,
-    `src/${target}/index.ts`,
-    `src/${target}/index.tsx`,
-  ].map((item) => normalizeSlashes(item));
+    `${b}.ts`,
+    `${b}.tsx`,
+    `${b}.js`,
+    `${b}.jsx`,
+    `${b}/index.ts`,
+    `${b}/index.tsx`,
+    `${b}/index.js`,
+    `${b}/index.jsx`,
+  ];
 }
