@@ -8,7 +8,7 @@ import { parseEslint } from "../parsers/parseEslint.js";
 import { parseNpmAudit } from "../parsers/parseNpmAudit.js";
 import { parseTsc } from "../parsers/parseTsc.js";
 import { detectProject } from "../project/detectProject.js";
-import { runLocalTool } from "../project/runTools.js";
+import { runLocalTool, runPackageManagerCommand } from "../project/runTools.js";
 import { stripAnsi } from "../utils/text.js";
 
 export interface CheckOptions {
@@ -118,7 +118,7 @@ async function collectToolRuns(
 
   if (enabled.audit) {
     if (project.packageManager === "npm" && project.lockfile === "package-lock.json") {
-      runs.push(await runLocalTool(project, "npm-audit", "npm", ["audit", "--json"]));
+    runs.push(await runPackageManagerCommand(project, "npm-audit", ["audit", "--json"]));
     } else {
       runs.push(skippedRun("npm-audit", "npm audit is only supported for npm with package-lock.json in v1."));
     }
@@ -132,21 +132,24 @@ function resolveEnabledTools(
   hasTsconfig: boolean,
   hasEslintConfig: boolean,
 ): { ts: boolean; eslint: boolean; audit: boolean } {
-  const argv = new Set(process.argv);
-  const tsOnly = argv.has("--ts");
-  const eslintOnly = argv.has("--eslint");
-  const disableTs = argv.has("--no-ts");
-  const disableEslint = argv.has("--no-eslint");
+  const tsFlag = options.ts;       // true = --ts, false = --no-ts, undefined = not set
+  const eslintFlag = options.eslint; // true = --eslint, false = --no-eslint, undefined = not set
 
-  let ts = disableTs ? false : hasTsconfig;
-  let eslint = disableEslint ? false : hasEslintConfig;
+  let ts: boolean;
+  let eslint: boolean;
 
-  if (tsOnly && !eslintOnly) {
+  if (tsFlag === true && eslintFlag !== true) {
+    // --ts without --eslint: run only TypeScript
     ts = true;
     eslint = false;
-  } else if (eslintOnly && !tsOnly) {
+  } else if (eslintFlag === true && tsFlag !== true) {
+    // --eslint without --ts: run only ESLint
     ts = false;
     eslint = true;
+  } else {
+    // default: respect explicit disables, otherwise follow project detection
+    ts = tsFlag === false ? false : hasTsconfig;
+    eslint = eslintFlag === false ? false : hasEslintConfig;
   }
 
   return {
