@@ -21,7 +21,7 @@ export function parseTsc(output: string): NormalizedDiagnostic[] {
       const last = diagnostics[diagnostics.length - 1];
       if (last) {
         last.raw = `${last.raw}\n${line}`;
-        last.message = `${last.message}\n${line.trim()}`.trim();
+        last.message = `${last.message}\n${line.trim()}`;
       }
       continue;
     }

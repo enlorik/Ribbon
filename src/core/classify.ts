@@ -46,11 +46,6 @@ export function extractTscSymbol(
     return { symbol: cannotFindName[1] };
   }
 
-  const missingProperty = message.match(/Property ['"]([^'"]+)['"] does not exist on type ['"]([^'"]+)['"]/i);
-  if (missingProperty?.[1] && missingProperty?.[2]) {
-    return { symbol: missingProperty[1], typeName: missingProperty[2] };
-  }
-
   if (code === "TS2551") {
     const missingWithSuggestion = message.match(
       /Property ['"]([^'"]+)['"] does not exist on type ['"]([^'"]+)['"]\.\s*Did you mean ['"]([^'"]+)['"]\?/i,
@@ -58,6 +53,11 @@ export function extractTscSymbol(
     if (missingWithSuggestion?.[1] && missingWithSuggestion?.[2]) {
       return { symbol: missingWithSuggestion[1], typeName: missingWithSuggestion[2] };
     }
+  }
+
+  const missingProperty = message.match(/Property ['"]([^'"]+)['"] does not exist on type ['"]([^'"]+)['"]/i);
+  if (missingProperty?.[1] && missingProperty?.[2]) {
+    return { symbol: missingProperty[1], typeName: missingProperty[2] };
   }
 
   const missingExportMember = message.match(
