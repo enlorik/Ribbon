@@ -86,3 +86,7 @@ The core modules are separated from CLI commands so a future desktop app can imp
 - xterm terminal
 - GitHub Actions / CI mode
 - Safe fix previews
+
+## CI notes
+
+When a new GitHub Actions workflow is introduced from a pull request for the first time, GitHub may require a maintainer to approve the workflow run before it executes.

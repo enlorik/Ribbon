@@ -76,8 +76,8 @@ export async function runCheck(options: CheckOptions): Promise<number> {
       }
     }
 
-    const maxFiles = Number(options.maxFiles ?? "2000");
-    const clusters = clusterCauseRibbons(diagnostics, project, Number.isFinite(maxFiles) ? maxFiles : 2000);
+    const maxFiles = parsePositiveIntOption(options.maxFiles, 2000);
+    const clusters = clusterCauseRibbons(diagnostics, project, maxFiles);
     const result: CheckResult = { project, diagnostics, clusters, toolRuns };
 
     const canColor = !options.noColor && Boolean(process.stdout.isTTY);
@@ -118,7 +118,7 @@ async function collectToolRuns(
 
   if (enabled.audit) {
     if (project.packageManager === "npm" && project.lockfile === "package-lock.json") {
-    runs.push(await runPackageManagerCommand(project, "npm-audit", ["audit", "--json"]));
+      runs.push(await runPackageManagerCommand(project, "npm-audit", ["audit", "--json"]));
     } else {
       runs.push(skippedRun("npm-audit", "npm audit is only supported for npm with package-lock.json in v1."));
     }
@@ -127,7 +127,14 @@ async function collectToolRuns(
   return runs;
 }
 
-function resolveEnabledTools(
+export function parsePositiveIntOption(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
+}
+
+export function resolveEnabledTools(
   options: CheckOptions,
   hasTsconfig: boolean,
   hasEslintConfig: boolean,
@@ -147,9 +154,9 @@ function resolveEnabledTools(
     ts = false;
     eslint = true;
   } else {
-    // default: respect explicit disables, otherwise follow project detection
-    ts = tsFlag === false ? false : hasTsconfig;
-    eslint = eslintFlag === false ? false : hasEslintConfig;
+    // default: respect explicit flag values when set, otherwise follow project detection
+    ts = tsFlag === false ? false : tsFlag === true ? true : hasTsconfig;
+    eslint = eslintFlag === false ? false : eslintFlag === true ? true : hasEslintConfig;
   }
 
   return {
