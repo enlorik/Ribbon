@@ -57,12 +57,12 @@ export function clusterCauseRibbons(
           )
         : [],
       confidence,
-      suggestedFirstAction: actionFor(category),
+      suggestedFirstAction: actionFor(category, grouped),
       explanation:
         grouped.length > 1
           ? "This cause ribbon is likely upstream. Several diagnostics may be downstream effects."
           : "This cause ribbon has one diagnostic and is a likely starting point.",
-      evidence: evidenceFor(anchor, grouped.length, filesCount, project),
+      evidence: evidenceFor(anchor, grouped, filesCount, project),
     };
     if (anchor) {
       cluster.anchor = anchor;
@@ -147,6 +147,9 @@ function titleFor(anchor: NormalizedDiagnostic | undefined, key: string): string
     return `Type mismatch: ${anchor.code ?? "TypeScript"}`;
   }
   if (key.startsWith("eslint:")) {
+    if (!anchor.ruleId && isLintParserLike(anchor.message)) {
+      return "Lint parser error";
+    }
     return `Lint rule: ${anchor.ruleId ?? "unknown"}`;
   }
   if (key.startsWith("audit:")) {
@@ -158,7 +161,7 @@ function titleFor(anchor: NormalizedDiagnostic | undefined, key: string): string
   return `Cause ribbon: ${anchor.category}`;
 }
 
-function actionFor(category: DiagnosticCategory): string {
+function actionFor(category: DiagnosticCategory, items: NormalizedDiagnostic[]): string {
   switch (category) {
     case "missing-module":
       return "Check the import path, path alias, and whether the file/package exists.";
@@ -167,6 +170,9 @@ function actionFor(category: DiagnosticCategory): string {
     case "syntax":
       return "Fix the earliest syntax error first, then rerun Ribbon.";
     case "lint":
+      if (items.some((item) => item.fixable)) {
+        return "Review this ESLint rule cluster, then run ESLint --fix carefully or inspect fix previews before applying changes.";
+      }
       return "Review this ESLint rule cluster; apply autofix only if the change is obvious.";
     case "security":
       return "Inspect the dependency path and update the vulnerable package if safe.";
@@ -179,10 +185,11 @@ function actionFor(category: DiagnosticCategory): string {
 
 function evidenceFor(
   anchor: NormalizedDiagnostic | undefined,
-  count: number,
+  items: NormalizedDiagnostic[],
   filesCount: number,
   project?: ProjectInfo,
 ): string[] {
+  const count = items.length;
   const evidence: string[] = [];
   if (anchor?.code) {
     evidence.push(anchor.code);
@@ -192,6 +199,12 @@ function evidenceFor(
   }
   evidence.push(`${count} diagnostics`);
   evidence.push(`${filesCount} files affected`);
+  if (items.some((item) => item.fixable)) {
+    evidence.push("fix available");
+  }
+  if (items.some((item) => (item.suggestionsCount ?? 0) > 0)) {
+    evidence.push("suggestions available");
+  }
   if (anchor?.symbol) {
     evidence.push(`repeated symbol '${anchor.symbol}'`);
   }
@@ -199,4 +212,9 @@ function evidenceFor(
     evidence.push("anchor in changed files");
   }
   return evidence;
+}
+
+function isLintParserLike(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("parsing error") || lower.includes("parser") || lower.includes("fatal");
 }

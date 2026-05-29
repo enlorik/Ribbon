@@ -28,8 +28,12 @@ export interface NormalizedDiagnostic {
   file?: string;
   line?: number;
   column?: number;
+  endLine?: number;
+  endColumn?: number;
   code?: string;
   ruleId?: string;
+  fixable?: boolean;
+  suggestionsCount?: number;
   packageName?: string;
   symbol?: string;
   typeName?: string;

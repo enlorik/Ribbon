@@ -66,6 +66,45 @@ describe("clusterCauseRibbons", () => {
     expect(clusters[0]?.title).toContain("Lint rule: no-undef");
   });
 
+  it("same ruleId clusters together", () => {
+    const data = [
+      diagnostic({ source: "eslint", category: "lint", ruleId: "react-hooks/exhaustive-deps", file: "a.tsx" }),
+      diagnostic({ source: "eslint", category: "lint", ruleId: "react-hooks/exhaustive-deps", file: "b.tsx" }),
+    ];
+    const clusters = clusterCauseRibbons(data);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]?.title).toBe("Lint rule: react-hooks/exhaustive-deps");
+  });
+
+  it("fixable lint diagnostics add fix available to evidence", () => {
+    const clusters = clusterCauseRibbons([
+      diagnostic({ source: "eslint", category: "lint", ruleId: "semi", fixable: true }),
+      diagnostic({ source: "eslint", category: "lint", ruleId: "semi" }),
+    ]);
+    expect(clusters[0]?.evidence).toContain("fix available");
+    expect(clusters[0]?.suggestedFirstAction).toContain("ESLint --fix");
+  });
+
+  it("suggestions add suggestions available to evidence", () => {
+    const clusters = clusterCauseRibbons([
+      diagnostic({ source: "eslint", category: "lint", ruleId: "no-console", suggestionsCount: 2 }),
+    ]);
+    expect(clusters[0]?.evidence).toContain("suggestions available");
+  });
+
+  it("null ruleId parser/fatal message gets useful title", () => {
+    const clusters = clusterCauseRibbons([
+      diagnostic({
+        source: "eslint",
+        category: "lint",
+        ruleId: undefined,
+        message: "Parsing error: Unexpected token",
+        file: "src/app.ts",
+      }),
+    ]);
+    expect(clusters[0]?.title).toBe("Lint parser error");
+  });
+
   it("singleton still produces cluster", () => {
     const clusters = clusterCauseRibbons([diagnostic({ code: "TS2322", category: "type" })]);
     expect(clusters).toHaveLength(1);
