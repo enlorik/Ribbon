@@ -29,6 +29,7 @@ export async function runCheck(options: CheckOptions): Promise<number> {
 
     let diagnostics: NormalizedDiagnostic[] = [];
     const toolRuns: ToolRunResult[] = [];
+    const parsedSources = new Set<DiagnosticSource>();
 
     if (options.demo) {
       diagnostics = createDemoDiagnostics(Boolean(options.audit));
@@ -40,10 +41,13 @@ export async function runCheck(options: CheckOptions): Promise<number> {
       for (const run of runResults) {
         const combined = stripAnsi(run.all || `${run.stdout}\n${run.stderr}`);
         if (run.tool === "typescript" && !run.skipped) {
-          diagnostics.push(...parseTsc(combined).map((item) => ({ ...item, toolCommand: `${run.command} ${run.args.join(" ")}` })));
+          const parsed = parseTsc(combined);
+          diagnostics.push(...parsed.map((item) => ({ ...item, toolCommand: `${run.command} ${run.args.join(" ")}` })));
+          if (parsed.length > 0) parsedSources.add("typescript");
         } else if (run.tool === "eslint" && !run.skipped) {
           const parsed = parseEslint(combined);
           diagnostics.push(...parsed.map((item) => ({ ...item, toolCommand: `${run.command} ${run.args.join(" ")}` })));
+          if (parsed.length > 0) parsedSources.add("eslint");
           if (parsed.length === 0 && combined.trim() && options.verbose) {
             diagnostics.push({
               id: `eslint-config-${diagnostics.length}`,
@@ -56,7 +60,9 @@ export async function runCheck(options: CheckOptions): Promise<number> {
             });
           }
         } else if (run.tool === "npm-audit" && !run.skipped) {
-          diagnostics.push(...parseNpmAudit(combined).map((item) => ({ ...item, toolCommand: `${run.command} ${run.args.join(" ")}` })));
+          const parsed = parseNpmAudit(combined);
+          diagnostics.push(...parsed.map((item) => ({ ...item, toolCommand: `${run.command} ${run.args.join(" ")}` })));
+          if (parsed.length > 0) parsedSources.add("npm-audit");
         }
       }
 
@@ -91,7 +97,7 @@ export async function runCheck(options: CheckOptions): Promise<number> {
     if (options.ts === true) requestedTools.add("typescript");
     if (options.eslint === true) requestedTools.add("eslint");
     if (options.audit === true) requestedTools.add("npm-audit");
-    return resolveCheckExitCode(diagnostics, toolRuns, requestedTools);
+    return resolveCheckExitCode(diagnostics, toolRuns, requestedTools, parsedSources);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Ribbon check could not complete: ${message}\n`);
@@ -189,19 +195,24 @@ export function resolveCheckExitCode(
   diagnostics: NormalizedDiagnostic[],
   toolRuns: ToolRunResult[],
   requestedTools: ReadonlySet<DiagnosticSource>,
+  parsedSources?: ReadonlySet<DiagnosticSource>,
 ): number {
+  const hadRealOutput = (tool: DiagnosticSource): boolean =>
+    parsedSources ? parsedSources.has(tool) : diagnostics.some((d) => d.source === tool);
+
   for (const run of toolRuns) {
     if (run.skipped === true && requestedTools.has(run.tool)) {
       return 2;
     }
-    // A requested tool that ran but exited nonzero with no parseable output
+    // A requested tool that ran but exited nonzero with no real parsed output
     // means the binary itself failed (e.g. not installed via npx --no-install).
+    // Synthetic verbose-fallback diagnostics do not count as real tool output.
     if (
       !run.skipped &&
       run.exitCode !== null &&
       run.exitCode !== 0 &&
       requestedTools.has(run.tool) &&
-      !diagnostics.some((d) => d.source === run.tool)
+      !hadRealOutput(run.tool)
     ) {
       return 2;
     }

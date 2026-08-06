@@ -69,6 +69,22 @@ describe("resolveCheckExitCode", () => {
     const run = makeRun("typescript", 1);
     expect(resolveCheckExitCode([makeDiag("error")], [run], requested)).toBe(1);
   });
+
+  it("synthetic verbose-fallback eslint diagnostic does not count as real output -> 2", () => {
+    const requested = new Set<DiagnosticSource>(["eslint"]);
+    const run = makeRun("eslint", 1);
+    const synthetic: NormalizedDiagnostic = { id: "eslint-config-0", source: "eslint", severity: "warning", category: "config", message: "non-JSON", raw: "" };
+    // parsedSources is empty: no real parsed output despite the synthetic diagnostic
+    expect(resolveCheckExitCode([synthetic], [run], requested, new Set())).toBe(2);
+  });
+
+  it("real eslint output in parsedSources -> 1, not 2", () => {
+    const requested = new Set<DiagnosticSource>(["eslint"]);
+    const run = makeRun("eslint", 1);
+    const diag: NormalizedDiagnostic = { id: "e1", source: "eslint", severity: "error", category: "lint", message: "err", raw: "" };
+    const parsedSources = new Set<DiagnosticSource>(["eslint"]);
+    expect(resolveCheckExitCode([diag], [run], requested, parsedSources)).toBe(1);
+  });
 });
 
 describe("resolveEnabledTools", () => {
