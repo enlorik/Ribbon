@@ -2,7 +2,7 @@ import path from "node:path";
 import { clusterCauseRibbons } from "../core/cluster.js";
 import { formatCheckOutput, summarizeToolFailure } from "../core/formatOutput.js";
 import { toJsonOutput } from "../core/jsonOutput.js";
-import type { CheckResult, NormalizedDiagnostic, ToolRunResult } from "../core/types.js";
+import type { CheckResult, DiagnosticSource, NormalizedDiagnostic, ToolRunResult } from "../core/types.js";
 import { createDemoDiagnostics } from "../demo/demoDiagnostics.js";
 import { parseEslint } from "../parsers/parseEslint.js";
 import { parseNpmAudit } from "../parsers/parseNpmAudit.js";
@@ -87,10 +87,11 @@ export async function runCheck(options: CheckOptions): Promise<number> {
       process.stdout.write(`${formatCheckOutput(result, { color: canColor, verbose: Boolean(options.verbose) })}\n`);
     }
 
-    if (diagnostics.length > 0) {
-      return 1;
-    }
-    return 0;
+    const requestedTools = new Set<DiagnosticSource>();
+    if (options.ts === true) requestedTools.add("typescript");
+    if (options.eslint === true) requestedTools.add("eslint");
+    if (options.audit === true) requestedTools.add("npm-audit");
+    return resolveCheckExitCode(diagnostics, toolRuns, requestedTools);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Ribbon check could not complete: ${message}\n`);
@@ -182,4 +183,20 @@ function skippedRun(tool: "typescript" | "eslint" | "npm-audit", reason: string)
 
 export function resolveRootPath(root: string | undefined): string {
   return path.resolve(root ?? process.cwd());
+}
+
+export function resolveCheckExitCode(
+  diagnostics: NormalizedDiagnostic[],
+  toolRuns: ToolRunResult[],
+  requestedTools: ReadonlySet<DiagnosticSource>,
+): number {
+  for (const run of toolRuns) {
+    if (run.skipped === true && requestedTools.has(run.tool)) {
+      return 2;
+    }
+  }
+  const hasActionable = diagnostics.some(
+    (d) => d.severity === "error" || d.severity === "warning",
+  );
+  return hasActionable ? 1 : 0;
 }

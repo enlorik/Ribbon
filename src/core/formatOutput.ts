@@ -15,19 +15,52 @@ export function formatCheckOutput(result: CheckResult, options: FormatOptions): 
         dim: (v) => String(v),
         yellow: (v) => String(v),
       };
-  if (result.clusters.length === 0) {
-    return "Ribbon found no problems from the enabled checks.";
+
+  const actionableClusters = result.clusters.filter(
+    (cluster) => cluster.severity === "error" || cluster.severity === "warning",
+  );
+  const infoClusters = result.clusters.filter((cluster) => cluster.severity === "info");
+
+  const lines: string[] = [];
+
+  if (actionableClusters.length === 0) {
+    lines.push("Ribbon found no actionable problems.");
+
+    if (options.verbose && infoClusters.length > 0) {
+      lines.push("");
+      lines.push("Notes:");
+      for (const cluster of infoClusters) {
+        lines.push(`  ${cluster.title}`);
+      }
+    }
+
+    const skipped = result.toolRuns.filter((run) => run.skipped);
+    if (skipped.length > 0 && !options.verbose) {
+      lines.push(`Skipped: ${skipped.map((run) => `${run.tool} ${run.skipReason ?? "skipped"}`).join("; ")}`);
+    }
+
+    return lines.join("\n").trimEnd();
   }
 
-  const totalDiagnostics = result.diagnostics.length;
-  const lines: string[] = [];
-  lines.push(c.bold(`Ribbon found ${result.clusters.length} cause ribbons tying ${totalDiagnostics} problems`));
+  const actionableDiagnosticsCount = actionableClusters.reduce(
+    (sum, cluster) => sum + cluster.diagnostics.length,
+    0,
+  );
+  lines.push(c.bold(`Ribbon found ${actionableClusters.length} cause ribbons tying ${actionableDiagnosticsCount} problems`));
   lines.push("");
 
-  result.clusters.forEach((cluster, index) => {
+  actionableClusters.forEach((cluster, index) => {
     lines.push(formatCluster(cluster, index + 1, c));
     lines.push("");
   });
+
+  if (options.verbose && infoClusters.length > 0) {
+    lines.push("Notes:");
+    for (const cluster of infoClusters) {
+      lines.push(`  ${cluster.title}`);
+    }
+    lines.push("");
+  }
 
   const skipped = result.toolRuns.filter((run) => run.skipped);
   if (skipped.length > 0) {
@@ -49,6 +82,7 @@ function formatCluster(cluster: CauseCluster, index: number, c: Pick<typeof pico
   const evidence = cluster.evidence.join("; ");
   return [
     `${index}. ${c.cyan(cluster.title)}`,
+    `   severity: ${cluster.severity}`,
     `   may explain: ${cluster.diagnostics.length} ${cluster.anchor?.source ?? "tool"} diagnostics`,
     `   origin candidate: ${origin}`,
     `   confidence: ${Math.round(cluster.confidence * 100)}%`,

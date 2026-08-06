@@ -7,6 +7,31 @@ interface PackageJsonDeps {
   devDependencies?: Record<string, string>;
 }
 
+export function resolveRecommendedCommands(project: {
+  hasTsconfig: boolean;
+  hasEslintConfig: boolean;
+  packageManager: string;
+  lockfile?: string;
+}): string[] {
+  const commands: string[] = [];
+
+  if (project.hasTsconfig && project.hasEslintConfig) {
+    commands.push("ribbon check");
+  } else if (project.hasTsconfig) {
+    commands.push("ribbon check --ts");
+  } else if (project.hasEslintConfig) {
+    commands.push("ribbon check --eslint");
+  } else {
+    commands.push("ribbon check --demo");
+  }
+
+  if (project.packageManager === "npm" && project.lockfile === "package-lock.json") {
+    commands.push("ribbon check --audit");
+  }
+
+  return commands;
+}
+
 export async function runDoctor(root?: string): Promise<number> {
   const project = await detectProject(root);
 
@@ -39,13 +64,10 @@ export async function runDoctor(root?: string): Promise<number> {
     }
   }
 
-  lines.push("", "Recommended:", "  ribbon check");
-
-  if (!project.hasTsconfig) {
-    lines.push("", "No tsconfig.json found; TypeScript check will be skipped.");
-  }
-  if (!project.hasEslintConfig) {
-    lines.push("No ESLint config found; ESLint check will be skipped.");
+  const recommended = resolveRecommendedCommands(project);
+  lines.push("", "Recommended:");
+  for (const cmd of recommended) {
+    lines.push(`  ${cmd}`);
   }
 
   process.stdout.write(`${formatDoctorOutput(lines)}\n`);

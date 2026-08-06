@@ -184,15 +184,15 @@ function setupTsconfigProject(tsconfigContent: unknown): { root: string; project
 }
 
 function missingModuleCluster(symbol: string, file?: string) {
-  const diag = {
+  const diag: import("../src/core/types.js").NormalizedDiagnostic = {
     id: "1",
-    source: "typescript" as const,
-    severity: "error" as const,
-    category: "missing-module" as const,
+    source: "typescript",
+    severity: "error",
+    category: "missing-module",
     message: `Cannot find module '${symbol}'.`,
     raw: `error TS2307: Cannot find module '${symbol}'.`,
     symbol,
-    file,
+    ...(file !== undefined ? { file } : {}),
   };
   return {
     category: "missing-module" as const,

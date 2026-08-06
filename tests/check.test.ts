@@ -1,5 +1,58 @@
 import { describe, expect, it } from "vitest";
-import { parsePositiveIntOption, resolveEnabledTools } from "../src/commands/check.js";
+import { parsePositiveIntOption, resolveCheckExitCode, resolveEnabledTools } from "../src/commands/check.js";
+import type { DiagnosticSource, NormalizedDiagnostic, ToolRunResult } from "../src/core/types.js";
+
+function makeDiag(severity: NormalizedDiagnostic["severity"]): NormalizedDiagnostic {
+  return { id: "d1", source: "typescript", severity, category: "type", message: "test", raw: "test" };
+}
+
+function makeSkippedRun(tool: DiagnosticSource): ToolRunResult {
+  return { tool, command: "", args: [], exitCode: null, stdout: "", stderr: "", all: "", skipped: true, skipReason: "not available" };
+}
+
+function makeRun(tool: DiagnosticSource, exitCode = 0): ToolRunResult {
+  return { tool, command: "", args: [], exitCode, stdout: "", stderr: "", all: "" };
+}
+
+describe("resolveCheckExitCode", () => {
+  it("no diagnostics and no tool runs -> 0", () => {
+    expect(resolveCheckExitCode([], [], new Set())).toBe(0);
+  });
+
+  it("info-only diagnostics -> 0", () => {
+    expect(resolveCheckExitCode([makeDiag("info")], [], new Set())).toBe(0);
+  });
+
+  it("warning diagnostic -> 1", () => {
+    expect(resolveCheckExitCode([makeDiag("warning")], [], new Set())).toBe(1);
+  });
+
+  it("error diagnostic -> 1", () => {
+    expect(resolveCheckExitCode([makeDiag("error")], [], new Set())).toBe(1);
+  });
+
+  it("explicitly requested tool that is skipped -> 2", () => {
+    const requested = new Set<DiagnosticSource>(["typescript"]);
+    expect(resolveCheckExitCode([], [makeSkippedRun("typescript")], requested)).toBe(2);
+  });
+
+  it("automatically skipped tool not in requested set -> 0, not 2", () => {
+    expect(resolveCheckExitCode([], [makeSkippedRun("typescript")], new Set())).toBe(0);
+  });
+
+  it("normal tsc run with exit code 1 and error diagnostic -> 1, not 2", () => {
+    const requested = new Set<DiagnosticSource>(["typescript"]);
+    const run = makeRun("typescript", 1);
+    expect(resolveCheckExitCode([makeDiag("error")], [run], requested)).toBe(1);
+  });
+
+  it("exit 2 takes precedence over diagnostics", () => {
+    const requested = new Set<DiagnosticSource>(["typescript"]);
+    expect(
+      resolveCheckExitCode([makeDiag("error")], [makeSkippedRun("typescript")], requested),
+    ).toBe(2);
+  });
+});
 
 describe("resolveEnabledTools", () => {
   it("default: uses hasTsconfig and hasEslintConfig", () => {
