@@ -35,8 +35,15 @@ export function formatCheckOutput(result: CheckResult, options: FormatOptions): 
     }
 
     const skipped = result.toolRuns.filter((run) => run.skipped);
-    if (skipped.length > 0 && !options.verbose) {
-      lines.push(`Skipped: ${skipped.map((run) => `${run.tool} ${run.skipReason ?? "skipped"}`).join("; ")}`);
+    if (skipped.length > 0) {
+      if (options.verbose) {
+        lines.push("Skipped tools:");
+        for (const run of skipped) {
+          lines.push(`  - ${run.tool}: ${run.skipReason ?? "skipped"}`);
+        }
+      } else {
+        lines.push(`Skipped: ${skipped.map((run) => `${run.tool} ${run.skipReason ?? "skipped"}`).join("; ")}`);
+      }
     }
 
     return lines.join("\n").trimEnd();
