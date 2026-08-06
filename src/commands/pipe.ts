@@ -40,7 +40,8 @@ export async function runPipe(options: PipeOptions): Promise<number> {
     );
   }
 
-  return diagnostics.length > 0 ? 1 : 0;
+  const hasActionable = diagnostics.some((d) => d.severity === "error" || d.severity === "warning");
+  return hasActionable ? 1 : 0;
 }
 
 async function readStdin(): Promise<string> {

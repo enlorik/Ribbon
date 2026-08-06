@@ -194,6 +194,17 @@ export function resolveCheckExitCode(
     if (run.skipped === true && requestedTools.has(run.tool)) {
       return 2;
     }
+    // A requested tool that ran but exited nonzero with no parseable output
+    // means the binary itself failed (e.g. not installed via npx --no-install).
+    if (
+      !run.skipped &&
+      run.exitCode !== null &&
+      run.exitCode !== 0 &&
+      requestedTools.has(run.tool) &&
+      !diagnostics.some((d) => d.source === run.tool)
+    ) {
+      return 2;
+    }
   }
   const hasActionable = diagnostics.some(
     (d) => d.severity === "error" || d.severity === "warning",

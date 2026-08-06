@@ -52,6 +52,23 @@ describe("resolveCheckExitCode", () => {
       resolveCheckExitCode([makeDiag("error")], [makeSkippedRun("typescript")], requested),
     ).toBe(2);
   });
+
+  it("requested tool ran, exited nonzero, produced no diagnostics -> 2 (binary not installed)", () => {
+    const requested = new Set<DiagnosticSource>(["typescript"]);
+    const run = makeRun("typescript", 127); // e.g. npx --no-install exits 127
+    expect(resolveCheckExitCode([], [run], requested)).toBe(2);
+  });
+
+  it("requested tool ran, exited nonzero, produced no diagnostics but not in requested set -> 0", () => {
+    const run = makeRun("typescript", 127);
+    expect(resolveCheckExitCode([], [run], new Set())).toBe(0);
+  });
+
+  it("requested tool ran, exited nonzero, but diagnostics present -> 1, not 2", () => {
+    const requested = new Set<DiagnosticSource>(["typescript"]);
+    const run = makeRun("typescript", 1);
+    expect(resolveCheckExitCode([makeDiag("error")], [run], requested)).toBe(1);
+  });
 });
 
 describe("resolveEnabledTools", () => {

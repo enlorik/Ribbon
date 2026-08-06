@@ -50,7 +50,8 @@ export function formatCheckOutput(result: CheckResult, options: FormatOptions): 
   }
 
   const actionableDiagnosticsCount = actionableClusters.reduce(
-    (sum, cluster) => sum + cluster.diagnostics.length,
+    (sum, cluster) =>
+      sum + cluster.diagnostics.filter((d) => d.severity === "error" || d.severity === "warning").length,
     0,
   );
   lines.push(c.bold(`Ribbon found ${actionableClusters.length} cause ribbons tying ${actionableDiagnosticsCount} problems`));
