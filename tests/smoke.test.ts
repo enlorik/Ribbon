@@ -15,7 +15,7 @@ function makeTmpProject(): string {
 
 describe("smoke: runCheck --demo", () => {
   let written: string;
-  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutSpy: { mockRestore(): void };
 
   beforeEach(() => {
     written = "";
@@ -63,7 +63,7 @@ describe("smoke: runCheck --demo", () => {
 
 describe("smoke: resolveEnabledTools via runCheck options", () => {
   let written: string;
-  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutSpy: { mockRestore(): void };
 
   beforeEach(() => {
     written = "";
@@ -99,7 +99,7 @@ describe("smoke: resolveEnabledTools via runCheck options", () => {
 
 describe("smoke: runDoctor", () => {
   let written: string;
-  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutSpy: { mockRestore(): void };
 
   beforeEach(() => {
     written = "";

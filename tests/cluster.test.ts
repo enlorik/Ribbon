@@ -97,7 +97,6 @@ describe("clusterCauseRibbons", () => {
       diagnostic({
         source: "eslint",
         category: "lint",
-        ruleId: undefined,
         message: "Parsing error: Unexpected token",
         file: "src/app.ts",
       }),

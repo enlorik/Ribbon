@@ -33,7 +33,24 @@ ribbon check --demo
 ribbon check --json
 ribbon check --audit
 ribbon doctor
+```
+
+## Pipe mode
+
+Pipe mode reads diagnostic output from stdin. Structured tool modes (`--tool tsc`, `--tool eslint`, `--tool audit`) are more reliable than unknown mode because they know the exact output format.
+
+```bash
+# TypeScript — structured mode (recommended)
 npm run build 2>&1 | ribbon pipe --tool tsc
+
+# ESLint — structured mode (recommended)
+npx eslint . --format json | ribbon pipe --tool eslint
+
+# npm audit — structured mode (recommended)
+npm audit --json | ribbon pipe --tool audit
+
+# Unknown output — falls back to generic parsing
+some-command 2>&1 | ribbon pipe
 ```
 
 ## What v1 supports
