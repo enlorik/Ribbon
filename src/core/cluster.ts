@@ -31,7 +31,7 @@ export function clusterCauseRibbons(
       ? { maxFiles: maxFilesOrOptions }
       : maxFilesOrOptions;
   const maxFiles = opts.maxFiles ?? 2000;
-  const projectIndex = opts.projectIndex ?? (project ? buildProjectIndex(project.root, maxFiles, project.tsconfigPath) : undefined);
+  const projectIndex = opts.projectIndex ?? (project && diagnostics.length > 0 ? buildProjectIndex(project.root, maxFiles, project.tsconfigPath) : undefined);
   const groups = new Map<string, NormalizedDiagnostic[]>();
 
   for (const diagnostic of diagnostics) {
