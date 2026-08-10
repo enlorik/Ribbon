@@ -90,11 +90,14 @@ Ribbon found 3 cause ribbons tying 42 problems
 1. Collect tool output
 2. Parse tool output
 3. Normalize diagnostics
-4. Cluster into cause ribbons
-5. Rank origin files
-6. Print calm output
+4. Build project index once (scan files, read contents)
+5. Cluster into cause ribbons
+6. Rank origin files using shared index
+7. Print calm output
 
 The core modules are separated from CLI commands so a future desktop app can import the same logic.
+
+Building the project index once per run avoids repeated filesystem scans: every origin-ranking call reads from the in-memory index rather than rediscovering and rereading files on disk.
 
 ## Future plan
 
@@ -116,4 +119,4 @@ When a new GitHub Actions workflow is introduced from a pull request for the fir
 
 **Why definition outranks error location in scoring** — The origin scorer gives +40 to the file that defines a missing type or symbol, and +20 to each file where a diagnostic appears. Those weights encode the real goal: the eighteen error sites are symptoms, and the one file containing `interface User` is where a single edit fixes all of them. Each ranked file carries its reasons — the output is meant to be an argument you can disagree with, not a black-box recommendation.
 
-**Known limits** — The content scan is regex-based and credits files by correlation, not by a proven import path from symptom to definition. The natural v2 is building a module graph and requiring reachability before awarding the definition bonus. Confidence values (0.9, 0.85, 0.45) are hand-set priors, not calibrated probabilities.
+**Known limits** — The content scan is regex-based and credits files by correlation, not by a proven import path from symptom to definition. Project files are indexed once per run; the next step is using that index to build a lightweight import graph so reachable definition files can outrank unrelated matches. Confidence values (0.9, 0.85, 0.45) are hand-set priors, not calibrated probabilities.

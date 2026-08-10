@@ -2,11 +2,13 @@ import path from "node:path";
 import { readTextFile } from "../utils/fs.js";
 import { normalizeSlashes } from "../utils/paths.js";
 import { discoverProjectFiles } from "../project/discoverFiles.js";
+import type { IndexedProjectFile, ProjectIndex } from "../project/projectIndex.js";
 import { readTsconfigPaths, resolveTsconfigAlias } from "../project/tsconfigPaths.js";
 import type { CauseCluster, OriginCandidate, ProjectInfo } from "./types.js";
 
 export interface RankOptions {
   maxFiles: number;
+  projectIndex?: ProjectIndex | undefined;
 }
 
 export function rankOriginCandidates(
@@ -17,8 +19,9 @@ export function rankOriginCandidates(
 ): OriginCandidate[] {
   const scores = new Map<string, { score: number; reasons: Set<string> }>();
   const changed = new Set(projectInfo?.git?.changedFiles ?? []);
-  const files = discoverProjectFiles(projectRoot, options.maxFiles);
-  const normalizedFileSet = new Set(files.map((file) => toCandidatePath(projectRoot, file)));
+
+  const indexedFiles = resolveIndexedFiles(projectRoot, options);
+  const normalizedFileSet = new Set(indexedFiles.map((f) => f.relativePath));
 
   const add = (file: string, points: number, reason: string): void => {
     const normalized = toCandidatePath(projectRoot, file);
@@ -65,7 +68,6 @@ export function rankOriginCandidates(
   const symbol = cluster.anchor?.symbol;
   const typeName = cluster.anchor?.typeName;
 
-  // Compute alias base paths for missing-module (used both below and inside the file loop)
   const missingModuleAliasBases: string[] = [];
   let usedTsconfigPaths = false;
 
@@ -82,7 +84,6 @@ export function rankOriginCandidates(
       }
     }
 
-    // Fallback: keep existing "@/..." -> "src/..." mapping
     if (!usedTsconfigPaths && symbol.startsWith("@/")) {
       missingModuleAliasBases.push(`src/${symbol.slice(2)}`);
     }
@@ -100,8 +101,8 @@ export function rankOriginCandidates(
     }
   }
 
-  for (const file of files) {
-    const text = readTextFile(file);
+  for (const indexedFile of indexedFiles) {
+    const { absolutePath: file, text } = indexedFile;
     if (!text) {
       continue;
     }
@@ -146,6 +147,20 @@ export function rankOriginCandidates(
     }))
     .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
     .slice(0, 5);
+}
+
+function resolveIndexedFiles(projectRoot: string, options: RankOptions): IndexedProjectFile[] {
+  if (options.projectIndex) {
+    return options.projectIndex.files;
+  }
+  const absolutePaths = discoverProjectFiles(projectRoot, options.maxFiles);
+  return absolutePaths.map((absolutePath) => {
+    const text = readTextFile(absolutePath) ?? "";
+    const relativePath = normalizeSlashes(path.relative(projectRoot, absolutePath));
+    const generated =
+      /(^|\/)(dist|build)\//.test(relativePath) || relativePath.endsWith(".min.js");
+    return { absolutePath, relativePath, text, generated };
+  });
 }
 
 function escapeRegExp(value: string): string {

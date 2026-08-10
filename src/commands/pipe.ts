@@ -1,4 +1,5 @@
 import { clusterCauseRibbons } from "../core/cluster.js";
+import { buildProjectIndex } from "../project/projectIndex.js";
 import { formatCheckOutput } from "../core/formatOutput.js";
 import { toJsonOutput } from "../core/jsonOutput.js";
 import type { CheckResult, DiagnosticSource, NormalizedDiagnostic } from "../core/types.js";
@@ -20,7 +21,8 @@ export async function runPipe(options: PipeOptions): Promise<number> {
   const input = await readStdin();
   const project = await detectProject(options.root);
   const diagnostics = parsePipeInput(input, options.tool ?? "unknown");
-  const clusters = clusterCauseRibbons(diagnostics, project);
+  const projectIndex = buildProjectIndex(project.root, 2000);
+  const clusters = clusterCauseRibbons(diagnostics, project, { projectIndex });
 
   const result: CheckResult = {
     project,
