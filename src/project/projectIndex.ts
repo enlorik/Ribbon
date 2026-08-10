@@ -2,6 +2,8 @@ import path from "node:path";
 import { readTextFile } from "../utils/fs.js";
 import { normalizeSlashes } from "../utils/paths.js";
 import { discoverProjectFiles } from "./discoverFiles.js";
+import type { TsconfigPathsData } from "./tsconfigPaths.js";
+import { readTsconfigPaths } from "./tsconfigPaths.js";
 
 export interface IndexedProjectFile {
   absolutePath: string;
@@ -14,9 +16,10 @@ export interface ProjectIndex {
   root: string;
   files: IndexedProjectFile[];
   byRelativePath: Map<string, IndexedProjectFile>;
+  tsconfigPaths?: TsconfigPathsData | undefined;
 }
 
-export function buildProjectIndex(root: string, maxFiles: number): ProjectIndex {
+export function buildProjectIndex(root: string, maxFiles: number, tsconfigPath?: string): ProjectIndex {
   const absolutePaths = discoverProjectFiles(root, maxFiles);
   absolutePaths.sort((a, b) => a.localeCompare(b));
 
@@ -34,5 +37,7 @@ export function buildProjectIndex(root: string, maxFiles: number): ProjectIndex 
     byRelativePath.set(relativePath, entry);
   }
 
-  return { root, files, byRelativePath };
+  const tsconfigPaths = tsconfigPath ? readTsconfigPaths(tsconfigPath) : undefined;
+
+  return { root, files, byRelativePath, tsconfigPaths };
 }

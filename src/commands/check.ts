@@ -84,8 +84,13 @@ export async function runCheck(options: CheckOptions): Promise<number> {
     }
 
     const maxFiles = parsePositiveIntOption(options.maxFiles, 2000);
-    const projectIndex = buildProjectIndex(project.root, maxFiles);
-    const clusters = clusterCauseRibbons(diagnostics, project, { maxFiles, projectIndex });
+    const projectIndex = diagnostics.length > 0
+      ? buildProjectIndex(project.root, maxFiles, project.tsconfigPath)
+      : undefined;
+    const clusterOpts = projectIndex !== undefined
+      ? { maxFiles, projectIndex }
+      : { maxFiles };
+    const clusters = clusterCauseRibbons(diagnostics, project, clusterOpts);
     const result: CheckResult = { project, diagnostics, clusters, toolRuns };
 
     const canColor = !options.noColor && Boolean(process.stdout.isTTY);

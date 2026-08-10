@@ -72,9 +72,8 @@ export function rankOriginCandidates(
   let usedTsconfigPaths = false;
 
   if (cluster.category === "missing-module" && symbol) {
-    const tsconfigPathsData = projectInfo?.tsconfigPath
-      ? readTsconfigPaths(projectInfo.tsconfigPath)
-      : undefined;
+    const tsconfigPathsData = options.projectIndex?.tsconfigPaths
+      ?? (projectInfo?.tsconfigPath ? readTsconfigPaths(projectInfo.tsconfigPath) : undefined);
 
     if (tsconfigPathsData) {
       const aliased = resolveTsconfigAlias(symbol, tsconfigPathsData);
