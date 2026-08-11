@@ -158,6 +158,19 @@ describe("resolveTsconfigAlias", () => {
     expect(result).toContain("src/lib/auth");
     expect(result).toContain("fallback/lib/auth");
   });
+
+  it("prefers more-specific patterns over less-specific ones", () => {
+    // "@/models/*" is more specific than "@/*" for "@/models/user"
+    const result = resolveTsconfigAlias("@/models/user", {
+      paths: {
+        "@/*": ["fallback/*"],
+        "@/models/*": ["models/*"],
+      },
+    });
+    // The more-specific pattern should resolve first
+    expect(result[0]).toBe("models/user");
+    expect(result).toContain("fallback/models/user");
+  });
 });
 
 // ---------------------------------------------------------------------------

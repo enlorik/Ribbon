@@ -49,9 +49,16 @@ export function resolveTsconfigAlias(symbol: string, pathsData: TsconfigPathsDat
   const { paths } = pathsData;
   if (!paths) return [];
 
+  // Sort patterns by specificity: exact matches first, then wildcards by
+  // prefix length descending (same rule TypeScript uses for paths resolution).
+  const sortedEntries = Object.entries(paths).sort(([a], [b]) => {
+    const specificity = (p: string) => (p.endsWith("/*") ? p.length - 1 : p.length);
+    return specificity(b) - specificity(a);
+  });
+
   const results: string[] = [];
 
-  for (const [pattern, targets] of Object.entries(paths)) {
+  for (const [pattern, targets] of sortedEntries) {
     const suffix = matchGlobPattern(symbol, pattern);
     if (suffix === undefined) continue;
 
