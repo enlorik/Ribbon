@@ -1,4 +1,4 @@
-import { readJsonFile } from "../utils/fs.js";
+import { readJsoncFile } from "../utils/fs.js";
 import { normalizeSlashes } from "../utils/paths.js";
 
 export interface TsconfigPathsData {
@@ -11,7 +11,7 @@ export interface TsconfigPathsData {
  * Returns undefined if the file is missing, invalid, or has no usable paths config.
  */
 export function readTsconfigPaths(tsconfigPath: string): TsconfigPathsData | undefined {
-  const data = readJsonFile<Record<string, unknown>>(tsconfigPath);
+  const data = readJsoncFile<Record<string, unknown>>(tsconfigPath);
   if (!data || typeof data !== "object") return undefined;
 
   const compilerOptions = data["compilerOptions"] as Record<string, unknown> | undefined;

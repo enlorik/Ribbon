@@ -104,6 +104,29 @@ describe("readTsconfigPaths", () => {
     writeFileSync(tsconfigPath, "{ invalid json }");
     expect(() => readTsconfigPaths(tsconfigPath)).not.toThrow();
   });
+
+  it("parses tsconfig with JSONC comments and trailing commas", () => {
+    const dir = tmpDir();
+    const tsconfigPath = path.join(dir, "tsconfig.json");
+    writeFileSync(
+      tsconfigPath,
+      `{
+  // root tsconfig
+  "compilerOptions": {
+    /* module resolution */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"], // alias
+    },
+  },
+}`,
+    );
+
+    const result = readTsconfigPaths(tsconfigPath);
+    expect(result).toBeDefined();
+    expect(result?.baseUrl).toBe(".");
+    expect(result?.paths).toEqual({ "@/*": ["src/*"] });
+  });
 });
 
 // ---------------------------------------------------------------------------

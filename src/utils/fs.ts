@@ -23,3 +23,23 @@ export function readJsonFile<T>(path: string): T | undefined {
     return undefined;
   }
 }
+
+// Strip JSONC (comments and trailing commas) so TypeScript config files parse correctly.
+function stripJsonc(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/,(\s*[}\]])/g, "$1");
+}
+
+export function readJsoncFile<T>(path: string): T | undefined {
+  const text = readTextFile(path);
+  if (!text) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(stripJsonc(text)) as T;
+  } catch {
+    return undefined;
+  }
+}
