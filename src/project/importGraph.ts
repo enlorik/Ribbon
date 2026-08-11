@@ -24,7 +24,7 @@ export function buildImportGraph(
     const edges = new Set<string>();
     const dir = normalizeSlashes(path.dirname(relativePath));
 
-    for (const specifier of extractSpecifiers(text)) {
+    for (const specifier of extractSpecifiers(stripComments(text))) {
       const resolved = resolveSpecifier(specifier, dir, fileSet, tsconfigPaths);
       if (resolved) {
         edges.add(resolved);
@@ -66,6 +66,12 @@ export function isReachable(
   return false;
 }
 
+function stripComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, "");
+}
+
 function extractSpecifiers(text: string): string[] {
   const specifiers: string[] = [];
   const seen = new Set<string>();
@@ -103,8 +109,8 @@ function resolveSpecifier(
     const full = normalizeSlashes(path.join(fromDir, specifier));
     // Direct hit (e.g. .ts imported as .ts)
     if (fileSet.has(full)) return full;
-    // TS ESM-style: `./foo.js` resolves to `./foo.ts`
-    const stripped = full.replace(/\.(m|c)?js$/, "");
+    // TS ESM-style: `./foo.js` and `./foo.jsx` resolve to their TS equivalents
+    const stripped = full.replace(/\.(m|c)?jsx?$/, "");
     return resolveWithExtensions(stripped, fileSet);
   }
 
@@ -116,6 +122,12 @@ function resolveSpecifier(
         : alias;
       const resolved = resolveWithExtensions(base, fileSet);
       if (resolved) return resolved;
+    }
+
+    // baseUrl fallback: bare specifier resolved relative to baseUrl directory
+    if (tsconfigPaths.baseUrl) {
+      const base = normalizeSlashes(path.join(tsconfigPaths.baseUrl, specifier));
+      return resolveWithExtensions(base, fileSet);
     }
   }
 

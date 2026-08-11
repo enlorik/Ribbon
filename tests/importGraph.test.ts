@@ -99,6 +99,34 @@ describe("buildImportGraph", () => {
     expect(graph.outgoing.get("src/a.ts")?.size).toBe(0);
   });
 
+  it("ignores commented-out imports", () => {
+    const files = [
+      { relativePath: "src/a.ts", text: "// import './legacy.js'\n/* from './old.js' */\n" },
+      { relativePath: "src/legacy.ts", text: "" },
+      { relativePath: "src/old.ts", text: "" },
+    ];
+    const graph = buildImportGraph(files);
+    expect(graph.outgoing.get("src/a.ts")?.size).toBe(0);
+  });
+
+  it("strips .jsx extension for TSX resolution", () => {
+    const files = [
+      { relativePath: "src/a.ts", text: "import './Button.jsx';\n" },
+      { relativePath: "src/Button.tsx", text: "" },
+    ];
+    const graph = buildImportGraph(files);
+    expect(graph.outgoing.get("src/a.ts")).toContain("src/Button.tsx");
+  });
+
+  it("resolves bare specifier relative to baseUrl (case E extended)", () => {
+    const files = [
+      { relativePath: "src/Profile.ts", text: "import { User } from 'types/user';\n" },
+      { relativePath: "src/types/user.ts", text: "export interface User { id: string }\n" },
+    ];
+    const graph = buildImportGraph(files, { baseUrl: "src" });
+    expect(graph.outgoing.get("src/Profile.ts")).toContain("src/types/user.ts");
+  });
+
   it("export * from resolves correctly", () => {
     const files = [
       { relativePath: "src/index.ts", text: "export * from './lib/core.js';\n" },
