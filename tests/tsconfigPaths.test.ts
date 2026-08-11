@@ -127,6 +127,64 @@ describe("readTsconfigPaths", () => {
     expect(result?.baseUrl).toBe(".");
     expect(result?.paths).toEqual({ "@/*": ["src/*"] });
   });
+
+  it("preserves strings containing // when stripping JSONC comments", () => {
+    const dir = tmpDir();
+    const tsconfigPath = path.join(dir, "tsconfig.json");
+    writeFileSync(
+      tsconfigPath,
+      `{
+  "compilerOptions": {
+    "baseUrl": "https://example.com/src",
+    "paths": { "@/*": ["src/*"] }
+  }
+}`,
+    );
+
+    const result = readTsconfigPaths(tsconfigPath);
+    expect(result?.baseUrl).toBe("https://example.com/src");
+  });
+
+  it("inherits baseUrl and paths from an extended config", () => {
+    const dir = tmpDir();
+    const basePath = path.join(dir, "tsconfig.base.json");
+    writeJson(basePath, {
+      compilerOptions: {
+        baseUrl: ".",
+        paths: { "@/*": ["src/*"] },
+      },
+    });
+    const childPath = path.join(dir, "tsconfig.json");
+    writeJson(childPath, { extends: "./tsconfig.base.json" });
+
+    const result = readTsconfigPaths(childPath);
+    expect(result).toBeDefined();
+    expect(result?.baseUrl).toBe(".");
+    expect(result?.paths).toEqual({ "@/*": ["src/*"] });
+  });
+
+  it("child compilerOptions take precedence over extended config", () => {
+    const dir = tmpDir();
+    const basePath = path.join(dir, "tsconfig.base.json");
+    writeJson(basePath, {
+      compilerOptions: {
+        baseUrl: "base",
+        paths: { "@/*": ["base/src/*"] },
+      },
+    });
+    const childPath = path.join(dir, "tsconfig.json");
+    writeJson(childPath, {
+      extends: "./tsconfig.base.json",
+      compilerOptions: {
+        baseUrl: "child",
+        paths: { "@/*": ["child/src/*"] },
+      },
+    });
+
+    const result = readTsconfigPaths(childPath);
+    expect(result?.baseUrl).toBe("child");
+    expect(result?.paths).toEqual({ "@/*": ["child/src/*"] });
+  });
 });
 
 // ---------------------------------------------------------------------------
