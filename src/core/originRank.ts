@@ -2,6 +2,7 @@ import path from "node:path";
 import { readTextFile } from "../utils/fs.js";
 import { normalizeSlashes } from "../utils/paths.js";
 import { discoverProjectFiles } from "../project/discoverFiles.js";
+import { buildImportGraph, isReachable } from "../project/importGraph.js";
 import { readTsconfigPaths, resolveTsconfigAlias } from "../project/tsconfigPaths.js";
 import type { CauseCluster, OriginCandidate, ProjectInfo } from "./types.js";
 
@@ -19,6 +20,9 @@ export function rankOriginCandidates(
   const changed = new Set(projectInfo?.git?.changedFiles ?? []);
   const files = discoverProjectFiles(projectRoot, options.maxFiles);
   const normalizedFileSet = new Set(files.map((file) => toCandidatePath(projectRoot, file)));
+  const tsconfigPathsData = projectInfo?.tsconfigPath
+    ? readTsconfigPaths(projectInfo.tsconfigPath)
+    : undefined;
 
   const add = (file: string, points: number, reason: string): void => {
     const normalized = toCandidatePath(projectRoot, file);
@@ -70,10 +74,6 @@ export function rankOriginCandidates(
   let usedTsconfigPaths = false;
 
   if (cluster.category === "missing-module" && symbol) {
-    const tsconfigPathsData = projectInfo?.tsconfigPath
-      ? readTsconfigPaths(projectInfo.tsconfigPath)
-      : undefined;
-
     if (tsconfigPathsData) {
       const aliased = resolveTsconfigAlias(symbol, tsconfigPathsData);
       if (aliased.length > 0) {
@@ -100,11 +100,16 @@ export function rankOriginCandidates(
     }
   }
 
+  const fileTexts = new Map<string, string>();
+
   for (const file of files) {
     const text = readTextFile(file);
     if (!text) {
       continue;
     }
+
+    const relPath = toCandidatePath(projectRoot, file);
+    fileTexts.set(relPath, text);
 
     if (typeName) {
       const typePattern = new RegExp(`\\b(interface|type|class)\\s+${escapeRegExp(typeName)}\\b`);
@@ -132,6 +137,30 @@ export function rankOriginCandidates(
       for (const base of missingModuleAliasBases) {
         if (normalizeSlashes(file).includes(base)) {
           add(file, 10, "path resembles missing module import");
+          break;
+        }
+      }
+    }
+  }
+
+  if (typeName !== undefined || (symbol !== undefined && !typeName)) {
+    const graph = buildImportGraph(
+      [...fileTexts.entries()].map(([relativePath, text]) => ({ relativePath, text })),
+      tsconfigPathsData,
+    );
+
+    const diagRelPaths = cluster.diagnostics
+      .filter((d) => d.file)
+      .map((d) => normalizeSlashes(d.file!));
+
+    for (const [relativePath, entry] of [...scores.entries()]) {
+      const isDefCandidate =
+        (typeName !== undefined && entry.reasons.has(`contains type ${typeName}`)) ||
+        (symbol !== undefined && !typeName && entry.reasons.has(`defines symbol ${symbol}`));
+      if (!isDefCandidate) continue;
+      for (const diagFile of diagRelPaths) {
+        if (isReachable(graph, diagFile, relativePath)) {
+          add(path.join(projectRoot, relativePath), 15, "reachable from diagnostic file");
           break;
         }
       }
