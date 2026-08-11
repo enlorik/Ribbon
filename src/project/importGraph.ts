@@ -7,7 +7,7 @@ export interface ImportGraph {
   outgoing: Map<string, Set<string>>;
 }
 
-const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"];
+const EXTENSIONS = [".ts", ".tsx", ".d.ts", ".js", ".jsx", ".mts", ".d.mts", ".cts", ".d.cts", ".mjs", ".cjs"];
 
 const FROM_RE = /\bfrom\s+['"]([^'"]+)['"]/g;
 const SIDE_EFFECT_RE = /\bimport\s+['"]([^'"]+)['"]/g;
