@@ -135,6 +135,15 @@ describe("buildImportGraph", () => {
     const graph = buildImportGraph(files);
     expect(graph.outgoing.get("src/index.ts")).toContain("src/lib/core.ts");
   });
+
+  it("does not create edges from import-like text inside string literals", () => {
+    const files = [
+      { relativePath: "src/a.ts", text: `const note = "copied from './legacy/user'";\n` },
+      { relativePath: "src/legacy/user.ts", text: "" },
+    ];
+    const graph = buildImportGraph(files);
+    expect(graph.outgoing.get("src/a.ts")?.size).toBe(0);
+  });
 });
 
 describe("isReachable", () => {

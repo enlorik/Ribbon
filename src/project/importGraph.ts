@@ -69,14 +69,34 @@ function stripComments(text: string): string {
     .replace(/\/\/[^\n]*/g, "");
 }
 
+// Replace string literal bodies that are NOT import specifiers with spaces so
+// that text like `"copied from './legacy/user'"` does not produce false edges.
+function maskNonImportStrings(text: string): string {
+  return text.replace(
+    /(['"])((?:\\[\s\S]|(?!\1)[^\\])*?)\1/g,
+    (match, _q, _body, offset: number) => {
+      const before = text.slice(Math.max(0, offset - 40), offset);
+      if (
+        /\bfrom\s+$/.test(before) ||
+        /\bimport\s+$/.test(before) ||
+        /\brequire\s*\(\s*$/.test(before)
+      ) {
+        return match;
+      }
+      return " ".repeat(match.length);
+    },
+  );
+}
+
 function extractSpecifiers(text: string): string[] {
+  const masked = maskNonImportStrings(text);
   const specifiers: string[] = [];
   const seen = new Set<string>();
 
   function collect(re: RegExp): void {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
+    while ((m = re.exec(masked)) !== null) {
       const s = m[1]!;
       if (!seen.has(s)) {
         seen.add(s);
