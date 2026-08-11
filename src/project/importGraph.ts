@@ -41,24 +41,21 @@ export function isReachable(
   graph: ImportGraph,
   fromFile: string,
   targetFile: string,
-  maxDepth = 10,
 ): boolean {
   if (fromFile === targetFile) return true;
 
   const visited = new Set<string>();
-  const queue: Array<{ file: string; depth: number }> = [{ file: fromFile, depth: 0 }];
+  const queue: string[] = [fromFile];
 
   while (queue.length > 0) {
-    const item = queue.shift()!;
-    if (visited.has(item.file)) continue;
-    visited.add(item.file);
+    const file = queue.shift()!;
+    if (visited.has(file)) continue;
+    visited.add(file);
 
-    if (item.depth >= maxDepth) continue;
-
-    for (const neighbor of graph.outgoing.get(item.file) ?? []) {
+    for (const neighbor of graph.outgoing.get(file) ?? []) {
       if (neighbor === targetFile) return true;
       if (!visited.has(neighbor)) {
-        queue.push({ file: neighbor, depth: item.depth + 1 });
+        queue.push(neighbor);
       }
     }
   }
@@ -119,7 +116,7 @@ function resolveSpecifier(
     for (const alias of aliases) {
       const base = tsconfigPaths.baseUrl
         ? normalizeSlashes(path.join(tsconfigPaths.baseUrl, alias))
-        : alias;
+        : normalizeSlashes(path.normalize(alias));
       const resolved = resolveWithExtensions(base, fileSet);
       if (resolved) return resolved;
     }

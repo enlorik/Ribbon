@@ -159,15 +159,18 @@ describe("isReachable", () => {
     expect(isReachable(graph, "a.ts", "b.ts")).toBe(false);
   });
 
-  it("respects maxDepth", () => {
-    // a -> b -> c, maxDepth=1 means c is not reachable from a
+  it("traverses deep chains without a depth limit", () => {
+    // a -> b -> c -> d -> e: all reachable despite many hops
     const graph = buildImportGraph([
       { relativePath: "a.ts", text: "import './b.js';\n" },
       { relativePath: "b.ts", text: "import './c.js';\n" },
-      { relativePath: "c.ts", text: "" },
+      { relativePath: "c.ts", text: "import './d.js';\n" },
+      { relativePath: "d.ts", text: "import './e.js';\n" },
+      { relativePath: "e.ts", text: "" },
     ]);
-    expect(isReachable(graph, "a.ts", "c.ts", 1)).toBe(false);
-    expect(isReachable(graph, "a.ts", "c.ts", 2)).toBe(true);
+    expect(isReachable(graph, "a.ts", "e.ts")).toBe(true);
+    expect(isReachable(graph, "a.ts", "c.ts")).toBe(true);
+    expect(isReachable(graph, "e.ts", "a.ts")).toBe(false);
   });
 });
 
