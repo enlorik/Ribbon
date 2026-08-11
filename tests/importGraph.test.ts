@@ -56,14 +56,22 @@ describe("buildImportGraph", () => {
     expect(isReachable(graph, "a.ts", "b.ts")).toBe(true);
   });
 
-  it("resolves tsconfig alias imports (case E)", () => {
-    const files = [
+  it("resolves tsconfig alias imports with baseUrl (case E)", () => {
+    // common layout: baseUrl "." with paths that include directory
+    const filesA = [
       { relativePath: "src/Profile.ts", text: "import { User } from '@/types/user';\n" },
       { relativePath: "src/types/user.ts", text: "export interface User { id: string }\n" },
     ];
-    const tsconfigPaths = { paths: { "@/*": ["src/*"] } };
-    const graph = buildImportGraph(files, tsconfigPaths);
-    expect(graph.outgoing.get("src/Profile.ts")).toContain("src/types/user.ts");
+    const g1 = buildImportGraph(filesA, { baseUrl: ".", paths: { "@/*": ["src/*"] } });
+    expect(g1.outgoing.get("src/Profile.ts")).toContain("src/types/user.ts");
+
+    // baseUrl "src" with paths that map @/user -> types/user (needs baseUrl prefix)
+    const filesB = [
+      { relativePath: "src/Profile.ts", text: "import { User } from '@/user';\n" },
+      { relativePath: "src/types/user.ts", text: "export interface User { id: string }\n" },
+    ];
+    const g2 = buildImportGraph(filesB, { baseUrl: "src", paths: { "@/*": ["types/*"] } });
+    expect(g2.outgoing.get("src/Profile.ts")).toContain("src/types/user.ts");
   });
 
   it("ignores package imports and missing files (case F)", () => {
@@ -198,6 +206,57 @@ describe("rankOriginCandidates with reachability", () => {
     expect(userCandidate).toBeDefined();
     expect(userCandidate?.reasons).toContain("reachable from diagnostic file");
     expect(candidates[0]?.file).toBe("src/types/user.ts");
+  });
+
+  it("handles absolute diagnostic file paths from tsc output", () => {
+    const root = makeTmpRoot();
+    writeFile(root, "src/types/user.ts", "export interface User { id: string }\n");
+    writeFile(root, "src/Profile.tsx", "import type { User } from './types/user.js';\nexport function f(u: User) { return u.name; }\n");
+
+    const project: ProjectInfo = {
+      root,
+      packageManager: "npm",
+      hasTsconfig: true,
+      hasEslintConfig: false,
+      scripts: {},
+    };
+
+    const absoluteFile = path.join(root, "src/Profile.tsx");
+    const candidates = rankOriginCandidates(
+      {
+        category: "missing-symbol",
+        diagnostics: [{
+          id: "1",
+          source: "typescript",
+          severity: "error",
+          category: "missing-symbol",
+          message: "Property 'name' does not exist on type 'User'.",
+          raw: "x",
+          code: "TS2339",
+          file: absoluteFile,
+          symbol: "name",
+          typeName: "User",
+        }],
+        anchor: {
+          id: "1",
+          source: "typescript",
+          severity: "error",
+          category: "missing-symbol",
+          message: "Property 'name' does not exist on type 'User'.",
+          raw: "x",
+          code: "TS2339",
+          file: absoluteFile,
+          symbol: "name",
+          typeName: "User",
+        },
+      },
+      root,
+      project,
+      { maxFiles: 200 },
+    );
+
+    const userCandidate = candidates.find((c) => c.file === "src/types/user.ts");
+    expect(userCandidate?.reasons).toContain("reachable from diagnostic file");
   });
 
   it("reachable definition outranks unrelated duplicate definition (case B)", () => {

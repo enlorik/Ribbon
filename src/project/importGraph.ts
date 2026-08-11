@@ -111,7 +111,10 @@ function resolveSpecifier(
   if (tsconfigPaths) {
     const aliases = resolveTsconfigAlias(specifier, tsconfigPaths);
     for (const alias of aliases) {
-      const resolved = resolveWithExtensions(normalizeSlashes(alias), fileSet);
+      const base = tsconfigPaths.baseUrl
+        ? normalizeSlashes(path.join(tsconfigPaths.baseUrl, alias))
+        : alias;
+      const resolved = resolveWithExtensions(base, fileSet);
       if (resolved) return resolved;
     }
   }

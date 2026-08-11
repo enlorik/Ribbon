@@ -151,7 +151,7 @@ export function rankOriginCandidates(
 
     const diagRelPaths = cluster.diagnostics
       .filter((d) => d.file)
-      .map((d) => normalizeSlashes(d.file!));
+      .map((d) => toCandidatePath(projectRoot, path.resolve(projectRoot, d.file!)));
 
     for (const [relativePath, entry] of [...scores.entries()]) {
       const isDefCandidate =
