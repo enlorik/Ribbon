@@ -2,6 +2,7 @@ import path from "node:path";
 import { readTextFile } from "../utils/fs.js";
 import { normalizeSlashes } from "../utils/paths.js";
 import { discoverProjectFiles } from "../project/discoverFiles.js";
+import { buildImportGraph, isReachable } from "../project/importGraph.js";
 import type { IndexedProjectFile, ProjectIndex } from "../project/projectIndex.js";
 import { readTsconfigPaths, resolveTsconfigAlias } from "../project/tsconfigPaths.js";
 import type { CauseCluster, OriginCandidate, ProjectInfo } from "./types.js";
@@ -22,6 +23,10 @@ export function rankOriginCandidates(
 
   const indexedFiles = resolveIndexedFiles(projectRoot, options);
   const normalizedFileSet = new Set(indexedFiles.map((f) => f.relativePath));
+
+  const tsconfigPathsData = options.projectIndex !== undefined
+    ? options.projectIndex.tsconfigPaths
+    : (projectInfo?.tsconfigPath ? readTsconfigPaths(projectInfo.tsconfigPath) : undefined);
 
   const add = (file: string, points: number, reason: string): void => {
     const normalized = toCandidatePath(projectRoot, file);
@@ -72,10 +77,6 @@ export function rankOriginCandidates(
   let usedTsconfigPaths = false;
 
   if (cluster.category === "missing-module" && symbol) {
-    const tsconfigPathsData = options.projectIndex !== undefined
-      ? options.projectIndex.tsconfigPaths
-      : (projectInfo?.tsconfigPath ? readTsconfigPaths(projectInfo.tsconfigPath) : undefined);
-
     if (tsconfigPathsData) {
       const aliased = resolveTsconfigAlias(symbol, tsconfigPathsData);
       if (aliased.length > 0) {
@@ -133,6 +134,27 @@ export function rankOriginCandidates(
       for (const base of missingModuleAliasBases) {
         if (normalizeSlashes(file).includes(base)) {
           add(file, 10, "path resembles missing module import");
+          break;
+        }
+      }
+    }
+  }
+
+  if (typeName !== undefined || (symbol !== undefined && !typeName)) {
+    const graph = buildImportGraph(indexedFiles, tsconfigPathsData);
+
+    const diagRelPaths = cluster.diagnostics
+      .filter((d) => d.file)
+      .map((d) => toCandidatePath(projectRoot, path.resolve(projectRoot, d.file!)));
+
+    for (const [relativePath, entry] of [...scores.entries()]) {
+      const isDefCandidate =
+        (typeName !== undefined && entry.reasons.has(`contains type ${typeName}`)) ||
+        (symbol !== undefined && !typeName && entry.reasons.has(`defines symbol ${symbol}`));
+      if (!isDefCandidate) continue;
+      for (const diagFile of diagRelPaths) {
+        if (isReachable(graph, diagFile, relativePath)) {
+          add(path.join(projectRoot, relativePath), 15, "reachable from diagnostic file");
           break;
         }
       }

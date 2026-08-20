@@ -1,4 +1,5 @@
-import { readJsonFile } from "../utils/fs.js";
+import nodePath from "node:path";
+import { readJsoncFile } from "../utils/fs.js";
 import { normalizeSlashes } from "../utils/paths.js";
 
 export interface TsconfigPathsData {
@@ -8,29 +9,60 @@ export interface TsconfigPathsData {
 
 /**
  * Read compilerOptions.baseUrl and compilerOptions.paths from a tsconfig.json.
+ * Follows a single-level `extends` chain so inherited options are included.
  * Returns undefined if the file is missing, invalid, or has no usable paths config.
  */
 export function readTsconfigPaths(tsconfigPath: string): TsconfigPathsData | undefined {
-  const data = readJsonFile<Record<string, unknown>>(tsconfigPath);
-  if (!data || typeof data !== "object") return undefined;
+  return readTsconfigPathsAt(nodePath.resolve(tsconfigPath), 0);
+}
 
+function extractOptions(
+  data: Record<string, unknown>,
+): { baseUrl: string | undefined; paths: Record<string, string[]> | undefined } {
   const compilerOptions = data["compilerOptions"] as Record<string, unknown> | undefined;
-  if (!compilerOptions || typeof compilerOptions !== "object") return undefined;
-
-  const baseUrl =
-    typeof compilerOptions["baseUrl"] === "string" ? compilerOptions["baseUrl"] : undefined;
-
-  const rawPaths = compilerOptions["paths"];
+  let baseUrl: string | undefined;
   let paths: Record<string, string[]> | undefined;
-  if (rawPaths !== null && typeof rawPaths === "object" && !Array.isArray(rawPaths)) {
-    const collected: Record<string, string[]> = {};
-    for (const [key, value] of Object.entries(rawPaths as Record<string, unknown>)) {
-      if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
-        collected[key] = value as string[];
+
+  if (compilerOptions && typeof compilerOptions === "object") {
+    if (typeof compilerOptions["baseUrl"] === "string") {
+      baseUrl = compilerOptions["baseUrl"];
+    }
+    const rawPaths = compilerOptions["paths"];
+    if (rawPaths !== null && typeof rawPaths === "object" && !Array.isArray(rawPaths)) {
+      const collected: Record<string, string[]> = {};
+      for (const [key, value] of Object.entries(rawPaths as Record<string, unknown>)) {
+        if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
+          collected[key] = value as string[];
+        }
+      }
+      if (Object.keys(collected).length > 0) {
+        paths = collected;
       }
     }
-    if (Object.keys(collected).length > 0) {
-      paths = collected;
+  }
+  return { baseUrl, paths };
+}
+
+function readTsconfigPathsAt(absPath: string, depth: number): TsconfigPathsData | undefined {
+  if (depth > 5) return undefined;
+
+  const data = readJsoncFile<Record<string, unknown>>(absPath);
+  if (!data || typeof data !== "object") return undefined;
+
+  let { baseUrl, paths } = extractOptions(data);
+
+  // Follow extends to pick up inherited compilerOptions
+  const extendsValue = data["extends"];
+  if (typeof extendsValue === "string" && (baseUrl === undefined || paths === undefined)) {
+    const extFile = extendsValue.endsWith(".json") ? extendsValue : `${extendsValue}.json`;
+    // Only follow relative or absolute extends (skip node_modules references)
+    if (extFile.startsWith(".") || nodePath.isAbsolute(extFile)) {
+      const parentPath = nodePath.resolve(nodePath.dirname(absPath), extFile);
+      const parent = readTsconfigPathsAt(parentPath, depth + 1);
+      if (parent) {
+        if (baseUrl === undefined) baseUrl = parent.baseUrl;
+        if (paths === undefined) paths = parent.paths;
+      }
     }
   }
 
@@ -49,9 +81,16 @@ export function resolveTsconfigAlias(symbol: string, pathsData: TsconfigPathsDat
   const { paths } = pathsData;
   if (!paths) return [];
 
+  // Sort patterns by specificity: exact matches first, then wildcards by
+  // prefix length descending (same rule TypeScript uses for paths resolution).
+  const sortedEntries = Object.entries(paths).sort(([a], [b]) => {
+    const specificity = (p: string) => (p.endsWith("/*") ? p.length - 1 : p.length);
+    return specificity(b) - specificity(a);
+  });
+
   const results: string[] = [];
 
-  for (const [pattern, targets] of Object.entries(paths)) {
+  for (const [pattern, targets] of sortedEntries) {
     const suffix = matchGlobPattern(symbol, pattern);
     if (suffix === undefined) continue;
 

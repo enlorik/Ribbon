@@ -104,6 +104,87 @@ describe("readTsconfigPaths", () => {
     writeFileSync(tsconfigPath, "{ invalid json }");
     expect(() => readTsconfigPaths(tsconfigPath)).not.toThrow();
   });
+
+  it("parses tsconfig with JSONC comments and trailing commas", () => {
+    const dir = tmpDir();
+    const tsconfigPath = path.join(dir, "tsconfig.json");
+    writeFileSync(
+      tsconfigPath,
+      `{
+  // root tsconfig
+  "compilerOptions": {
+    /* module resolution */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"], // alias
+    },
+  },
+}`,
+    );
+
+    const result = readTsconfigPaths(tsconfigPath);
+    expect(result).toBeDefined();
+    expect(result?.baseUrl).toBe(".");
+    expect(result?.paths).toEqual({ "@/*": ["src/*"] });
+  });
+
+  it("preserves strings containing // when stripping JSONC comments", () => {
+    const dir = tmpDir();
+    const tsconfigPath = path.join(dir, "tsconfig.json");
+    writeFileSync(
+      tsconfigPath,
+      `{
+  "compilerOptions": {
+    "baseUrl": "https://example.com/src",
+    "paths": { "@/*": ["src/*"] }
+  }
+}`,
+    );
+
+    const result = readTsconfigPaths(tsconfigPath);
+    expect(result?.baseUrl).toBe("https://example.com/src");
+  });
+
+  it("inherits baseUrl and paths from an extended config", () => {
+    const dir = tmpDir();
+    const basePath = path.join(dir, "tsconfig.base.json");
+    writeJson(basePath, {
+      compilerOptions: {
+        baseUrl: ".",
+        paths: { "@/*": ["src/*"] },
+      },
+    });
+    const childPath = path.join(dir, "tsconfig.json");
+    writeJson(childPath, { extends: "./tsconfig.base.json" });
+
+    const result = readTsconfigPaths(childPath);
+    expect(result).toBeDefined();
+    expect(result?.baseUrl).toBe(".");
+    expect(result?.paths).toEqual({ "@/*": ["src/*"] });
+  });
+
+  it("child compilerOptions take precedence over extended config", () => {
+    const dir = tmpDir();
+    const basePath = path.join(dir, "tsconfig.base.json");
+    writeJson(basePath, {
+      compilerOptions: {
+        baseUrl: "base",
+        paths: { "@/*": ["base/src/*"] },
+      },
+    });
+    const childPath = path.join(dir, "tsconfig.json");
+    writeJson(childPath, {
+      extends: "./tsconfig.base.json",
+      compilerOptions: {
+        baseUrl: "child",
+        paths: { "@/*": ["child/src/*"] },
+      },
+    });
+
+    const result = readTsconfigPaths(childPath);
+    expect(result?.baseUrl).toBe("child");
+    expect(result?.paths).toEqual({ "@/*": ["child/src/*"] });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -157,6 +238,19 @@ describe("resolveTsconfigAlias", () => {
     });
     expect(result).toContain("src/lib/auth");
     expect(result).toContain("fallback/lib/auth");
+  });
+
+  it("prefers more-specific patterns over less-specific ones", () => {
+    // "@/models/*" is more specific than "@/*" for "@/models/user"
+    const result = resolveTsconfigAlias("@/models/user", {
+      paths: {
+        "@/*": ["fallback/*"],
+        "@/models/*": ["models/*"],
+      },
+    });
+    // The more-specific pattern should resolve first
+    expect(result[0]).toBe("models/user");
+    expect(result).toContain("fallback/models/user");
   });
 });
 
