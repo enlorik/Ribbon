@@ -1,5 +1,6 @@
 import path from "node:path";
 import { clusterCauseRibbons } from "../core/cluster.js";
+import { buildProjectIndex } from "../project/projectIndex.js";
 import { formatCheckOutput, summarizeToolFailure } from "../core/formatOutput.js";
 import { toJsonOutput } from "../core/jsonOutput.js";
 import type { CheckResult, DiagnosticSource, NormalizedDiagnostic, ToolRunResult } from "../core/types.js";
@@ -83,7 +84,13 @@ export async function runCheck(options: CheckOptions): Promise<number> {
     }
 
     const maxFiles = parsePositiveIntOption(options.maxFiles, 2000);
-    const clusters = clusterCauseRibbons(diagnostics, project, maxFiles);
+    const projectIndex = diagnostics.length > 0
+      ? buildProjectIndex(project.root, maxFiles, project.tsconfigPath)
+      : undefined;
+    const clusterOpts = projectIndex !== undefined
+      ? { maxFiles, projectIndex }
+      : { maxFiles };
+    const clusters = clusterCauseRibbons(diagnostics, project, clusterOpts);
     const result: CheckResult = { project, diagnostics, clusters, toolRuns };
 
     const canColor = !options.noColor && Boolean(process.stdout.isTTY);

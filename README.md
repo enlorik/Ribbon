@@ -90,11 +90,14 @@ Ribbon found 3 cause ribbons tying 42 problems
 1. Collect tool output
 2. Parse tool output
 3. Normalize diagnostics
-4. Cluster into cause ribbons
-5. Rank origin files
-6. Print calm output
+4. Build project index once (scan files, read contents)
+5. Cluster into cause ribbons
+6. Rank origin files using shared index
+7. Print calm output
 
 The core modules are separated from CLI commands so a future desktop app can import the same logic.
+
+Building the project index once per run avoids repeated filesystem scans: every origin-ranking call reads from the in-memory index rather than rediscovering and rereading files on disk.
 
 ## Future plan
 

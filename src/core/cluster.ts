@@ -1,5 +1,7 @@
 import { makeClusterId } from "./ids.js";
 import { rankOriginCandidates } from "./originRank.js";
+import { buildProjectIndex } from "../project/projectIndex.js";
+import type { ProjectIndex } from "../project/projectIndex.js";
 import type {
   CauseCluster,
   DiagnosticCategory,
@@ -14,11 +16,22 @@ const SEVERITY_WEIGHT: Record<DiagnosticSeverity, number> = {
   info: 1,
 };
 
+export interface ClusterOptions {
+  maxFiles?: number;
+  projectIndex?: ProjectIndex;
+}
+
 export function clusterCauseRibbons(
   diagnostics: NormalizedDiagnostic[],
   project?: ProjectInfo,
-  maxFiles = 2000,
+  maxFilesOrOptions: number | ClusterOptions = 2000,
 ): CauseCluster[] {
+  const opts: ClusterOptions =
+    typeof maxFilesOrOptions === "number"
+      ? { maxFiles: maxFilesOrOptions }
+      : maxFilesOrOptions;
+  const maxFiles = opts.maxFiles ?? 2000;
+  const projectIndex = opts.projectIndex ?? (project && diagnostics.length > 0 ? buildProjectIndex(project.root, maxFiles, project.tsconfigPath) : undefined);
   const groups = new Map<string, NormalizedDiagnostic[]>();
 
   for (const diagnostic of diagnostics) {
@@ -53,7 +66,7 @@ export function clusterCauseRibbons(
             { diagnostics: grouped, ...(anchor ? { anchor } : {}), category },
             project.root,
             project,
-            { maxFiles },
+            { maxFiles, projectIndex },
           )
         : [],
       confidence,
